@@ -147,25 +147,56 @@ def check_invariants(conn: sqlite3.Connection) -> list[str]:
     # already seen, so the recursion terminates even though the data loops.
     # Joining to the parent row excludes nodes that are unreachable merely
     # because their parent is missing -- a distinct fault, reported above.
-    cycles = conn.execute(
-        """
-        WITH RECURSIVE reachable(id) AS (
-            SELECT id FROM nodes WHERE parent_id IS NULL
-            UNION
-            SELECT n.id FROM nodes AS n JOIN reachable AS r ON n.parent_id = r.id
-        )
-        SELECT n.id, n.name
-        FROM nodes AS n
-        JOIN nodes AS p ON p.id = n.parent_id
-        WHERE n.id NOT IN (SELECT id FROM reachable)
-        ORDER BY n.name
-        """
-    ).fetchall()
     problems.extend(
-        f"node {row[1]!r} is unreachable from any root and lies on a parent cycle" for row in cycles
+        f"node {row[1]!r} is unreachable from any root and lies on a parent cycle"
+        for row in _find_cycles(conn)
     )
 
     return problems
+
+
+def _find_cycles(conn: sqlite3.Connection) -> list[tuple[bytes, str]]:
+    """Return nodes that no path from a root can reach.
+
+    The reachable set is materialised into an indexed temporary table before the
+    anti-join. Expressing it as ``NOT IN (SELECT ... FROM cte)`` instead is
+    quadratic, because a CTE carries no index and is rescanned for every
+    candidate row: measured at 111 s for 25k nodes and 466 s for 50k. With the
+    temporary table and the composite parent index from migration 0003, the same
+    work is a pair of indexed passes.
+
+    Args:
+        conn: Connection to inspect.
+
+    Returns:
+        ``(id, name)`` for each unreachable node whose parent does exist.
+    """
+    conn.execute("DROP TABLE IF EXISTS temp.reachable_nodes")
+    conn.execute("CREATE TEMP TABLE reachable_nodes (id BLOB PRIMARY KEY)")
+    try:
+        conn.execute(
+            """
+            INSERT INTO temp.reachable_nodes (id)
+            WITH RECURSIVE reachable(id) AS (
+                SELECT id FROM nodes WHERE parent_id IS NULL
+                UNION
+                SELECT n.id FROM nodes AS n JOIN reachable AS r ON n.parent_id = r.id
+            )
+            SELECT id FROM reachable
+            """
+        )
+        return conn.execute(
+            """
+            SELECT n.id, n.name
+            FROM nodes AS n
+            JOIN nodes AS p ON p.id = n.parent_id
+            LEFT JOIN temp.reachable_nodes AS r ON r.id = n.id
+            WHERE r.id IS NULL
+            ORDER BY n.name
+            """
+        ).fetchall()
+    finally:
+        conn.execute("DROP TABLE IF EXISTS temp.reachable_nodes")
 
 
 def restore_from_snapshot(vault_path: Path, snapshot_path: Path) -> Path | None:
