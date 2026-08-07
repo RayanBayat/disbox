@@ -70,18 +70,18 @@ DARK: Final = Palette(
     is_dark=True,
     # Alpha on the surfaces is deliberate: the Mica backdrop shows through, so
     # the window picks up the desktop behind it the way native Windows 11 apps do.
-    window="rgba(22, 22, 26, 0.72)",
-    surface="rgba(30, 30, 36, 0.66)",
-    surface_raised="rgba(38, 38, 46, 0.80)",
+    window="rgba(26, 24, 28, 0.74)",
+    surface="rgba(35, 32, 38, 0.68)",
+    surface_raised="rgba(45, 41, 49, 0.82)",
     surface_hover="rgba(255, 255, 255, 0.055)",
     surface_active="rgba(255, 255, 255, 0.085)",
     border="rgba(255, 255, 255, 0.075)",
     border_strong="rgba(255, 255, 255, 0.14)",
-    text="#F2F3F7",
-    text_muted="#A8ABB8",
-    text_subtle="#6E7280",
-    accent="#7C6CFF",
-    accent_hover="#8E80FF",
+    text="#F5F2F4",
+    text_muted="#B0A9B4",
+    text_subtle="#7A737E",
+    accent="#8B7BFF",
+    accent_hover="#9E90FF",
     accent_text="#FFFFFF",
     accent_subtle="rgba(124, 108, 255, 0.16)",
     danger="#FF6B6B",
@@ -100,16 +100,16 @@ DARK: Final = Palette(
 LIGHT: Final = Palette(
     name="light",
     is_dark=False,
-    window="rgba(246, 247, 250, 0.80)",
-    surface="rgba(255, 255, 255, 0.72)",
+    window="rgba(250, 248, 249, 0.82)",
+    surface="rgba(255, 255, 255, 0.74)",
     surface_raised="rgba(255, 255, 255, 0.90)",
     surface_hover="rgba(0, 0, 0, 0.040)",
     surface_active="rgba(0, 0, 0, 0.065)",
     border="rgba(0, 0, 0, 0.075)",
     border_strong="rgba(0, 0, 0, 0.14)",
-    text="#14161C",
-    text_muted="#5A5F6E",
-    text_subtle="#8A8F9E",
+    text="#1A1519",
+    text_muted="#635C66",
+    text_subtle="#8F878F",
     accent="#5B4BE8",
     accent_hover="#4A3AD6",
     accent_text="#FFFFFF",
@@ -142,9 +142,10 @@ class Space:
 class Radius:
     """Corner radii. Larger surfaces take larger radii so curvature reads evenly."""
 
-    SM: Final = 6
-    MD: Final = 8
-    LG: Final = 12
+    SM: Final = 8
+    MD: Final = 12
+    LG: Final = 16
+    XL: Final = 20
     PILL: Final = 999
 
 

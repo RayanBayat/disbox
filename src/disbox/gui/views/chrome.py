@@ -67,11 +67,11 @@ class TitleBar(QWidget):
         layout.setContentsMargins(Space.LG, 0, 0, 0)
         layout.setSpacing(Space.SM)
 
-        mark = QLabel()
-        mark.setPixmap(icons.pixmap("shield", palette.accent, size=18, ratio=2.0))
+        self._mark = QLabel()
+        self._mark.setPixmap(icons.pixmap("shield", palette.accent, size=18, ratio=2.0))
         self._title = QLabel(window.windowTitle())
         self._title.setObjectName("TitleText")
-        layout.addWidget(mark)
+        layout.addWidget(self._mark)
         layout.addWidget(self._title)
         layout.addStretch(1)
 
@@ -91,6 +91,17 @@ class TitleBar(QWidget):
         button.setFixedSize(_BUTTON_WIDTH, _TITLE_BAR_HEIGHT)
         button.clicked.connect(slot)
         return button
+
+    def retint(self, palette: Palette) -> None:
+        """Redraw the caption's icons for a new palette."""
+        self._palette = palette
+        self._mark.setPixmap(icons.pixmap("shield", palette.accent, size=18, ratio=2.0))
+        for button, name in (
+            (self.minimise_button, "minimise"),
+            (self.close_button, "close"),
+        ):
+            button.setIcon(icons.icon(name, palette.text_muted, size=12, ratio=2.0))
+        self._sync_maximise_icon()
 
     def set_title(self, text: str) -> None:
         """Update the displayed window title."""

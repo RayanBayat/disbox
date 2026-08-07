@@ -41,9 +41,11 @@ from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Motion, Palette, Space, apply_backdrop, icons
+from disbox.gui.theme.backdrop import round_window_corners
 from disbox.gui.theme.stylesheet import build_stylesheet
-from disbox.gui.theme.tokens import DARK
+from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
+from disbox.gui.views.row_delegate import AnimatedRowDelegate
 
 __all__ = ["MainWindow"]
 
@@ -84,6 +86,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     def _apply_window_material(self) -> None:
         """Request a compositor backdrop, and stay opaque if there is none."""
         handle = int(self.winId())
+        # A frameless window loses the compositor's corner rounding; ask for it
+        # back, or the app sits on the desktop with hard right angles that no
+        # other Windows 11 window has.
+        round_window_corners(handle)
         if apply_backdrop(handle, Backdrop.MICA):
             # Only stop painting our own background once the material is
             # confirmed; otherwise the window would render as a hole.
@@ -186,6 +192,9 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         layout.setContentsMargins(Space.MD, Space.SM, Space.LG, Space.SM)
         layout.setSpacing(Space.XS)
 
+        self._theme_button = self._icon_button("settings", "Switch theme")
+        self._theme_button.clicked.connect(self.toggle_theme)
+
         self._back_button = self._icon_button("arrow-left", "Back")
         self._back_button.clicked.connect(self.navigate_back)
         self._up_button = self._icon_button("arrow-up", "Up one level")
@@ -219,6 +228,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         glyph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         layout.addWidget(search_wrap)
+        layout.addWidget(self._theme_button)
         return header
 
     def _build_table(self) -> QTableView:
@@ -231,9 +241,13 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         table.setShowGrid(False)
         table.setAlternatingRowColors(False)
         table.setFrameShape(QFrame.Shape.NoFrame)
-        table.setSortingEnabled(False)
+        table.setSortingEnabled(True)
         table.setMouseTracking(True)  # required for per-row hover styling
         table.doubleClicked.connect(self._on_double_click)
+        # Qt Style Sheets cannot ease anything, so hover and selection are
+        # painted by a delegate instead of declared in QSS.
+        self.row_delegate = AnimatedRowDelegate(table, self._palette)
+        table.setItemDelegate(self.row_delegate)
 
         vertical = table.verticalHeader()
         vertical.setVisible(False)
@@ -245,6 +259,9 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         header.setSectionResizeMode(Column.SIZE, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(Column.MODIFIED, QHeaderView.ResizeMode.Fixed)
         header.setHighlightSections(False)
+        header.setSortIndicatorShown(True)
+        header.setSectionsClickable(True)
+        header.sortIndicatorChanged.connect(self._on_sort_changed)
         table.setColumnWidth(Column.SIZE, 110)
         table.setColumnWidth(Column.MODIFIED, 160)
         return table
@@ -332,6 +349,35 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             action.setShortcut(sequence)
             action.triggered.connect(slot)
             self.addAction(action)
+
+    def toggle_theme(self) -> None:
+        """Switch between the dark and light palettes, live."""
+        self.apply_palette(LIGHT if self._palette.is_dark else DARK)
+
+    def apply_palette(self, palette: Palette) -> None:
+        """Re-theme every part of the window without rebuilding it.
+
+        Icons are re-rendered rather than recoloured, because they are
+        rasterised from SVG at their tint; the model and the delegate hold
+        their own copies of the palette and must be told too.
+        """
+        self._palette = palette
+        self.setStyleSheet(build_stylesheet(palette))
+        self.table_model.set_palette(palette)
+        self.row_delegate.set_palette(palette)
+        self._retint_icons()
+        self._set_crumbs(self._crumbs)
+        self.update()
+
+    def _retint_icons(self) -> None:
+        """Redraw every icon in the chrome for the current palette."""
+        for button, name in (
+            (self._back_button, "arrow-left"),
+            (self._up_button, "arrow-up"),
+            (self._theme_button, "settings"),
+        ):
+            button.setIcon(icons.icon(name, self._palette.text_muted, size=18, ratio=2.0))
+        self.title_bar.retint(self._palette)
 
     # ---------------------------------------------------------- navigation --
 
@@ -422,6 +468,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._status.setText(f"{count} item{'' if count == 1 else 's'}")
         self._up_button.setEnabled(self._directory is not None)
         self._back_button.setEnabled(bool(self._history))
+
+    def _on_sort_changed(self, column: int, order: Qt.SortOrder) -> None:
+        """Re-read the directory in the requested order."""
+        self.table_model.set_sort(Column(column), ascending=order == Qt.SortOrder.AscendingOrder)
 
     def _play_fade(self) -> None:
         """Fade the content back in after its contents change."""

@@ -152,6 +152,8 @@ class FileTableModel(QAbstractTableModel):
         self._row_count = 0
         self._pages: dict[int, list[Row]] = {}
         self._results: list[Row] | None = None
+        self._sort_column = Column.NAME
+        self._sort_ascending = True
 
     # ----------------------------------------------------------- navigation --
 
@@ -199,6 +201,27 @@ class FileTableModel(QAbstractTableModel):
             for record in cursor.fetchall()
         }
         return [by_id[node_id] for node_id in node_ids if node_id in by_id]
+
+    def set_sort(self, column: Column, *, ascending: bool) -> None:
+        """Reorder the current directory.
+
+        Folders stay grouped above files whatever the sort, because mixing them
+        makes a directory much harder to scan; only the order within each group
+        changes.
+        """
+        self._sort_column = column
+        self._sort_ascending = ascending
+        self.refresh()
+
+    def _order_clause(self) -> str:
+        """Build the ORDER BY matching the current sort."""
+        direction = "ASC" if self._sort_ascending else "DESC"
+        key = {
+            Column.NAME: "name COLLATE NOCASE",
+            Column.SIZE: "size",
+            Column.MODIFIED: "modified_at",
+        }[self._sort_column]
+        return f"(kind = 'dir') DESC, {key} {direction}"
 
     def refresh(self) -> None:
         """Re-read the current directory from the vault."""
@@ -355,7 +378,7 @@ class FileTableModel(QAbstractTableModel):
             # expression, direction, and collation -- or SQLite sorts instead of
             # walking the index. Folders first, then by name, as file managers do.
             f"SELECT id, name, kind, size, modified_at FROM nodes WHERE {where} "  # noqa: S608
-            "ORDER BY (kind = 'dir') DESC, name COLLATE NOCASE LIMIT ? OFFSET ?",
+            f"ORDER BY {self._order_clause()} LIMIT ? OFFSET ?",
             (*params, self._page_size, page_number * self._page_size),
         )
         page = [

@@ -23,13 +23,23 @@ from typing import Final
 
 from disbox.log import get_logger
 
-__all__ = ["Backdrop", "apply_backdrop", "is_supported", "set_dark_titlebar"]
+__all__ = [
+    "Backdrop",
+    "apply_backdrop",
+    "is_supported",
+    "round_window_corners",
+    "set_dark_titlebar",
+]
 
 logger = get_logger(__name__)
 
 # DWM window attributes. Values are fixed by the Windows API.
 _DWMWA_USE_IMMERSIVE_DARK_MODE: Final = 20
 _DWMWA_SYSTEMBACKDROP_TYPE: Final = 38
+_DWMWA_WINDOW_CORNER_PREFERENCE: Final = 33
+
+# DWM_WINDOW_CORNER_PREFERENCE values.
+_DWMWCP_ROUND: Final = 2
 
 # SYSTEMBACKDROP_TYPE arrived in Windows 11 22H2.
 _MIN_BACKDROP_BUILD: Final = 22621
@@ -96,6 +106,26 @@ def set_dark_titlebar(window_handle: int, *, dark: bool) -> bool:
     if sys.platform != "win32":
         return False
     return _set_attribute(window_handle, _DWMWA_USE_IMMERSIVE_DARK_MODE, int(dark))
+
+
+def round_window_corners(window_handle: int) -> bool:
+    """Restore Windows 11's rounded corners on a frameless window.
+
+    Removing the system frame also removes the rounding the compositor would
+    otherwise apply, leaving hard right angles that look wrong beside every
+    other window on the desktop. Only DWM can round the actual window region --
+    a stylesheet radius would clip the content while the window itself stayed
+    square, showing a sliver of background in each corner.
+
+    Args:
+        window_handle: Native window handle (``int(widget.winId())``).
+
+    Returns:
+        True if the compositor accepted it.
+    """
+    if sys.platform != "win32":
+        return False
+    return _set_attribute(window_handle, _DWMWA_WINDOW_CORNER_PREFERENCE, _DWMWCP_ROUND)
 
 
 def apply_backdrop(window_handle: int, backdrop: Backdrop = Backdrop.MICA) -> bool:
