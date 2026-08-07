@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M1 — Vault (5 / 8)
+**Branch:** `main` · **Current milestone:** M1 — Vault (7 / 8)
 
 ---
 
@@ -13,7 +13,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | Milestone | Scope | Status | Done |
 |---|---|---|---:|
 | **M0** | Bootstrap: tooling, git, CI | ✅ Complete | 7 / 7 |
-| **M1** | Vault (SQLite, snapshots, integrity) | 🟡 In progress | 5 / 8 |
+| **M1** | Vault (SQLite, snapshots, integrity) | 🟡 In progress | 7 / 8 |
 | M2 | Crypto (Argon2id, AES-GCM, headers) | ⚪ Not started | 0 / 7 |
 | M3 | Chunking & manifest (FastCDC, Merkle) | ⚪ Not started | 0 / 5 |
 | M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
@@ -23,7 +23,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | M8 | GUI (PySide6) | ⚪ Not started | 0 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **12 / 81** |
+| | **Total** | | **14 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,8 +33,8 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 111 passed |
-| Types | ✅ | `mypy --strict`, 23 files, no issues |
+| Tests | ✅ | 140 passed |
+| Types | ✅ | `mypy --strict`, 27 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
 | CI | ✅ | Windows + Linux matrix; lockfile audited, 0 vulnerabilities |
@@ -88,15 +88,16 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | M1-3 | Snapshot rotation via backup API | ✅ | Online Backup API + atomic rename; retention tested |
 | M1-4 | Journal writes behind a decorator | ✅ | Entry + mutation share one transaction |
 | M1-5 | Integrity check + restore from snapshot | ✅ | `quick_check` on every open; restore quarantines the damaged file; all 3 SPEC §11 invariants covered incl. parent cycles |
-| M1-6 | Export / import round-trip | ⚪ | Next |
-| M1-7 | FTS5 trigram index with sync triggers | ⚪ | Table exists; triggers pending |
-| M1-8 | 250k-node benchmark fixture | ⚪ | |
+| M1-6 | Export / import round-trip | ✅ | Readable JSON; Hypothesis property test over random trees |
+| M1-7 | FTS5 trigram index with sync triggers | ✅ | Migration 0002; search 1.0–1.8 ms at 250k nodes vs 50 ms budget |
+| M1-8 | 250k-node benchmark fixture | 🟡 | `docs/scripts/bench_vault.py` written; needs a pytest fixture + CI marker |
 
 ### Corrections to SPEC.md found while building
 
 | # | Issue | Resolution |
 |---|---|---|
 | 1 | **§3.3 `UNIQUE (parent_id, name, deleted_at)` is silently ineffective.** SQL treats NULLs as distinct in unique constraints, so every live node (`deleted_at IS NULL`) and every top-level node (`parent_id IS NULL`) escaped it — the common case, not an edge case. Duplicate sibling names were allowed. | Replaced with a partial unique index over `COALESCE(parent_id, X'00')` scoped to live rows. Trashing a node now correctly frees its name. |
+| 5 | **The cycle check was quadratic** — 111 s at 25k nodes, 466 s at 50k. `NOT IN (SELECT … FROM cte)` rescans an unindexed CTE per row, and `idx_nodes_parent` was partial so it could not serve a whole-tree walk. | Migration 0003 swaps in a composite `(parent_id, deleted_at)` index; `_find_cycles` materialises the reachable set into an indexed temp table. Now **1.0 s at 250k, linear**. See [`docs/benchmarks.md`](./docs/benchmarks.md). |
 | 4 | **Foreign keys cannot prevent a parent cycle.** A→B then repointing A at B leaves every row valid but the subtree unreachable, invisible to tree walks and able to hang a naive traversal. | Recursive CTE walks *down* from roots and reports the unreachable; `UNION` guarantees termination. |
 | 3 | **`sqlite3.connect()` used as a context manager never closes the connection** — it only commits or rolls back the transaction. Leaked handles surfaced as `PytestUnraisableExceptionWarning`. | Always `contextlib.closing(sqlite3.connect(...))`. |
 | 2 | **A PID-based lockfile cannot detect staleness reliably.** PIDs are recycled and cross-host liveness is unknowable, so a crash could strand the vault permanently. | OS advisory lock (`msvcrt` / `fcntl`); the kernel releases it on process death. Verified by killing a holder mid-run. |
@@ -127,6 +128,9 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | `d79360f` | feat(core): add append-only journal with a journaled decorator |
 | `5808d24` | feat(core): add integrity checks and snapshot restore |
 | `2b52c74` | feat(core): detect parent cycles in the node tree |
+| `28d6121` | feat(core): add vault export and import |
+| `a3e1fe3` | feat(core): add substring search backed by FTS5 trigram triggers |
+| `366e01b` | perf(core): make cycle detection linear instead of quadratic |
 
 ---
 
@@ -151,4 +155,6 @@ uv run ruff format .         # format
 - Vault files (`*.dbx`) and `snapshots/` are gitignored — they hold wrapped keys.
 - **`sqlite3.connect()` in a `with` block does not close the connection.** Use `contextlib.closing`.
 - **Naming a method `list` shadows the builtin inside the class body**, so a `-> list[X]` annotation on a sibling method resolves to the method. Caught by mypy.
+- **Benchmarks must `flush=True` or write to a file.** A buffered benchmark looked hung for 10 minutes while it was actually running.
+- **Schema is at version 3.** Migrations chain automatically; add `000N_name.sql` to `src/disbox/core/schema/`.
 - **`structlog.configure` mutates global state.** An autouse fixture in `tests/conftest.py` resets it between tests.
