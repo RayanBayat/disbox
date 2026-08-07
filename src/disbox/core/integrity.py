@@ -7,9 +7,14 @@ Three layers, cheapest first:
 * `full_check` -- the complete structural check plus foreign-key verification.
   Run on demand or on a schedule.
 * `check_invariants` -- application-level rules SQLite cannot express as
-  constraints, most importantly that ``chunks.refcount`` matches reality. A
-  drifted refcount is dangerous in both directions: too high leaks storage
-  forever, too low lets the collector delete a blob a live file still needs.
+  constraints. Two matter most:
+
+  - ``chunks.refcount`` must match reality. Drift is dangerous in both
+    directions: too high leaks storage forever, too low lets the collector
+    delete a blob a live file still needs.
+  - The tree must be acyclic. Foreign keys cannot enforce this, and a cycle
+    makes an entire subtree unreachable while every row remains individually
+    valid.
 
 Recovery never destroys evidence. A vault replaced from a snapshot is moved
 aside rather than overwritten, because a damaged database is frequently still
@@ -130,6 +135,34 @@ def check_invariants(conn: sqlite3.Connection) -> list[str]:
     ).fetchall()
     problems.extend(
         f"node {row[1]!r} references a parent that does not exist" for row in missing_parents
+    )
+
+    # Foreign keys cannot prevent a parent cycle: inserting A with no parent,
+    # then B under A, then repointing A at B leaves both rows referentially
+    # valid and mutually unreachable. Such a subtree is invisible to every tree
+    # walk and would hang a naive recursive traversal.
+    #
+    # Rather than chasing parent chains, walk down from the roots and report
+    # whatever the walk cannot reach. UNION (not UNION ALL) discards rows
+    # already seen, so the recursion terminates even though the data loops.
+    # Joining to the parent row excludes nodes that are unreachable merely
+    # because their parent is missing -- a distinct fault, reported above.
+    cycles = conn.execute(
+        """
+        WITH RECURSIVE reachable(id) AS (
+            SELECT id FROM nodes WHERE parent_id IS NULL
+            UNION
+            SELECT n.id FROM nodes AS n JOIN reachable AS r ON n.parent_id = r.id
+        )
+        SELECT n.id, n.name
+        FROM nodes AS n
+        JOIN nodes AS p ON p.id = n.parent_id
+        WHERE n.id NOT IN (SELECT id FROM reachable)
+        ORDER BY n.name
+        """
+    ).fetchall()
+    problems.extend(
+        f"node {row[1]!r} is unreachable from any root and lies on a parent cycle" for row in cycles
     )
 
     return problems

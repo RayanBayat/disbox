@@ -105,6 +105,80 @@ class TestInvariants:
         assert problems, "a manifest pointing at a missing chunk must be reported"
 
 
+class TestCycleDetection:
+    """Foreign keys cannot prevent a parent cycle, so it must be detected.
+
+    Inserting A with no parent, then B under A, then repointing A at B leaves
+    both rows referentially valid and mutually unreachable. Such a cycle is
+    invisible to every tree walk and would hang a naive recursive traversal.
+    """
+
+    @staticmethod
+    def add(vault: Vault, node_id: bytes, parent: bytes | None, name: str) -> None:
+        vault.connection.execute(
+            "INSERT INTO nodes (id, parent_id, name, kind, created_at, modified_at) "
+            "VALUES (?, ?, ?, 'dir', '2026-01-01', '2026-01-01')",
+            (node_id, parent, name),
+        )
+
+    def test_healthy_tree_reports_no_cycle(self, vault: Vault) -> None:
+        with vault.connection:
+            self.add(vault, b"\xa1", None, "top")
+            self.add(vault, b"\xa2", b"\xa1", "middle")
+            self.add(vault, b"\xa3", b"\xa2", "leaf")
+
+        assert check_invariants(vault.connection) == []
+
+    def test_self_referencing_node_is_detected(self, vault: Vault) -> None:
+        with vault.connection:
+            self.add(vault, b"\xb1", None, "selfloop")
+            vault.connection.execute("UPDATE nodes SET parent_id = id WHERE id = X'B1'")
+
+        problems = check_invariants(vault.connection)
+        assert any("cycle" in problem for problem in problems), problems
+
+    def test_two_node_cycle_is_detected(self, vault: Vault) -> None:
+        with vault.connection:
+            self.add(vault, b"\xc1", None, "alpha")
+            self.add(vault, b"\xc2", b"\xc1", "beta")
+            vault.connection.execute("UPDATE nodes SET parent_id = X'C2' WHERE id = X'C1'")
+
+        problems = check_invariants(vault.connection)
+        assert any("cycle" in problem for problem in problems), problems
+
+    def test_longer_cycle_is_detected(self, vault: Vault) -> None:
+        with vault.connection:
+            self.add(vault, b"\xd1", None, "one")
+            self.add(vault, b"\xd2", b"\xd1", "two")
+            self.add(vault, b"\xd3", b"\xd2", "three")
+            vault.connection.execute("UPDATE nodes SET parent_id = X'D3' WHERE id = X'D1'")
+
+        problems = check_invariants(vault.connection)
+        assert any("cycle" in problem for problem in problems), problems
+
+    def test_a_missing_parent_is_not_reported_as_a_cycle(self, vault: Vault) -> None:
+        """The two faults are distinct and must not be conflated."""
+        with vault.connection as conn:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            self.add(vault, b"\xe1", b"\xee", "dangling")
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        problems = check_invariants(vault.connection)
+        assert problems, "a dangling parent must still be reported"
+        assert not any("cycle" in problem for problem in problems), problems
+
+    def test_check_terminates_on_a_cycle(self, vault: Vault) -> None:
+        """A cycle must not make the check itself hang or recurse forever."""
+        with vault.connection:
+            self.add(vault, b"\xf1", None, "loop-a")
+            self.add(vault, b"\xf2", b"\xf1", "loop-b")
+            self.add(vault, b"\xf3", None, "unrelated")
+            vault.connection.execute("UPDATE nodes SET parent_id = X'F2' WHERE id = X'F1'")
+
+        problems = check_invariants(vault.connection)  # would hang if unbounded
+        assert any("loop-a" in p or "loop-b" in p for p in problems), problems
+
+
 class TestRestore:
     def test_restore_replaces_a_corrupt_vault(self, vault: Vault, vault_path: Path) -> None:
         store = SnapshotStore(vault_path.parent / "snapshots")
