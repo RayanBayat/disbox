@@ -212,6 +212,7 @@ class FileTableModel(QAbstractTableModel):
         self._sort_column = column
         self._sort_ascending = ascending
         self.refresh()
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(Column) - 1)
 
     def _order_clause(self) -> str:
         """Build the ORDER BY matching the current sort."""
@@ -272,6 +273,11 @@ class FileTableModel(QAbstractTableModel):
             return int(icons.alignment_for_column(column is Column.SIZE))
         if role != Qt.ItemDataRole.DisplayRole:
             return None
+        # The arrow is part of the header text rather than Qt's own indicator,
+        # which anchors to the edge of the section -- and the Name section is
+        # stretched, so it floated far from the label it describes.
+        if column is self._sort_column:
+            return f"{_HEADERS[column]}  {'↑' if self._sort_ascending else '↓'}"
         return _HEADERS[column]
 
     def data(  # noqa: PLR0911 - one branch per Qt role; a dispatch dict would

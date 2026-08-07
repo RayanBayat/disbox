@@ -258,7 +258,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         header.setSectionResizeMode(Column.SIZE, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(Column.MODIFIED, QHeaderView.ResizeMode.Fixed)
         header.setHighlightSections(False)
-        header.setSortIndicatorShown(True)
+        header.setSortIndicatorShown(False)
         header.setSectionsClickable(True)
         header.sortIndicatorChanged.connect(self._on_sort_changed)
         table.setColumnWidth(Column.SIZE, 110)
