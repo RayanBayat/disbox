@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M1 — Vault (7 / 8)
+**Branch:** `main` · **Current milestone:** M8a — GUI skeleton (pulled forward)
 
 ---
 
@@ -20,10 +20,10 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | M5 | Discord backend | ⚪ Not started | 0 / 10 |
 | M6 | Transfer engine | ⚪ Not started | 0 / 7 |
 | M7 | Filesystem & maintenance | ⚪ Not started | 0 / 9 |
-| M8 | GUI (PySide6) | ⚪ Not started | 0 / 15 |
+| **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **14 / 81** |
+| | **Total** | | **17 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,8 +33,8 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 140 passed |
-| Types | ✅ | `mypy --strict`, 27 files, no issues |
+| Tests | ✅ | 167 passed |
+| Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
 | CI | ✅ | Windows + Linux matrix; lockfile audited, 0 vulnerabilities |
@@ -104,6 +104,27 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 
 ---
 
+## M8a — GUI skeleton (resequenced)
+
+Pulled ahead of its milestone on 2026-08-07. The SPEC put the GUI behind 42
+tasks of plumbing, which deferred both risky UI unknowns to the very end. Doing
+a thin slice now proved one assumption false immediately (see below).
+
+| Task | Description | Status |
+|---|---|---|
+| M8-2 | Paged `QAbstractTableModel` over SQLite | ✅ 0.64% of rows resident at 250k |
+| M8-4 | Main window shell, breadcrumb, status bar | ✅ |
+| M8-8 | Search wired to FTS5 | ✅ |
+| M8-1 | Qt ⇄ asyncio bridge | ⏸ Deferred — nothing async exists until M6 |
+| M8-3 | Folder tree pane | ⚪ Next |
+| M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
+
+**What the UI can do today:** open a vault, browse directories, navigate
+back/up, search the whole tree, see sizes and timestamps. It cannot upload or
+download — no backend exists yet.
+
+---
+
 ## Commit log
 
 | Commit | Message |
@@ -131,6 +152,10 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | `28d6121` | feat(core): add vault export and import |
 | `a3e1fe3` | feat(core): add substring search backed by FTS5 trigram triggers |
 | `366e01b` | perf(core): make cycle detection linear instead of quadratic |
+| `0c2a7bc` | feat(gui): add paged file table model over the vault |
+| `bd7dde5` | perf(gui): serve directory listings from an ordered index |
+| `691a252` | feat(gui): add the main window and application entry point |
+| `1ddedc4` | fix(gui): show search results in the table |
 
 ---
 
@@ -155,6 +180,8 @@ uv run ruff format .         # format
 - Vault files (`*.dbx`) and `snapshots/` are gitignored — they hold wrapped keys.
 - **`sqlite3.connect()` in a `with` block does not close the connection.** Use `contextlib.closing`.
 - **Naming a method `list` shadows the builtin inside the class body**, so a `-> list[X]` annotation on a sibling method resolves to the method. Caught by mypy.
+- **Qt's `offscreen` platform renders no glyphs** — screenshots come out as tofu boxes. Use `QT_QPA_PLATFORM=windows` for any visual check; `offscreen` is still right for tests.
+- **A passing GUI test can hide a visibly broken UI.** Assert on what the model displays, never on the widget's internal state.
 - **Benchmarks must `flush=True` or write to a file.** A buffered benchmark looked hung for 10 minutes while it was actually running.
 - **Schema is at version 3.** Migrations chain automatically; add `000N_name.sql` to `src/disbox/core/schema/`.
 - **`structlog.configure` mutates global state.** An autouse fixture in `tests/conftest.py` resets it between tests.
