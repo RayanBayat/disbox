@@ -21,7 +21,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
 
-from disbox.core import migrations
+from disbox.core import integrity, migrations
 from disbox.core.lock import FileLock
 from disbox.errors import VaultError
 
@@ -155,6 +155,9 @@ class Vault:
         try:
             conn = sqlite3.connect(path, isolation_level="DEFERRED")
             _apply_pragmas(conn)
+            # SPEC.md V5: refuse to write to a damaged vault. Checked before
+            # migrating, since migrating damaged pages only spreads the harm.
+            integrity.quick_check(conn)
             migrations.migrate(conn)
         except sqlite3.DatabaseError as exc:
             # Raised when the file exists but is not a SQLite database at all.
