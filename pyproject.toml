@@ -17,6 +17,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "pyside6>=6.11.1",
     "structlog>=26.1.0",
 ]
 
@@ -33,6 +34,7 @@ dev = [
     "hypothesis>=6.165",
     "mypy>=2.3",
     "ruff>=0.16",
+    "pytest-qt>=4.5.0",
 ]
 
 [build-system] # PEP 517/518
