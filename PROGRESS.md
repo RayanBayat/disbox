@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M0 complete → M1 next
+**Branch:** `main` · **Current milestone:** M1 — Vault (2 / 8)
 
 ---
 
@@ -13,7 +13,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | Milestone | Scope | Status | Done |
 |---|---|---|---:|
 | **M0** | Bootstrap: tooling, git, CI | ✅ Complete | 7 / 7 |
-| M1 | Vault (SQLite, snapshots, integrity) | ⚪ Not started | 0 / 8 |
+| **M1** | Vault (SQLite, snapshots, integrity) | 🟡 In progress | 2 / 8 |
 | M2 | Crypto (Argon2id, AES-GCM, headers) | ⚪ Not started | 0 / 7 |
 | M3 | Chunking & manifest (FastCDC, Merkle) | ⚪ Not started | 0 / 5 |
 | M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
@@ -23,7 +23,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | M8 | GUI (PySide6) | ⚪ Not started | 0 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **7 / 81** |
+| | **Total** | | **9 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,12 +33,12 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 21 passed |
-| Types | ✅ | `mypy --strict`, 7 files, no issues |
+| Tests | ✅ | 63 passed |
+| Types | ✅ | `mypy --strict`, 16 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
 | CI | ✅ | Windows + Linux matrix; lockfile audited, 0 vulnerabilities |
-| Coverage | ⚪ | Not enforced until M1 lands real logic |
+| Coverage | ⚪ | Enforced from M1-8 onward |
 
 ---
 
@@ -79,6 +79,28 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 
 ---
 
+## M1 — Vault
+
+| Task | Description | Status | Notes |
+|---|---|---|---|
+| M1-1 | Schema + version-keyed migration runner | ✅ | Found and fixed a real SPEC bug — see below |
+| M1-2 | `Vault.open/create/close`, pragmas, lockfile | ✅ | OS advisory lock; survives an unclean kill |
+| M1-3 | Snapshot rotation via backup API | ⚪ | Next |
+| M1-4 | Journal writes behind a decorator | ⚪ | |
+| M1-5 | Integrity check + restore from snapshot | ⚪ | |
+| M1-6 | Export / import round-trip | ⚪ | |
+| M1-7 | FTS5 trigram index with sync triggers | ⚪ | Table exists; triggers pending |
+| M1-8 | 250k-node benchmark fixture | ⚪ | |
+
+### Corrections to SPEC.md found while building
+
+| # | Issue | Resolution |
+|---|---|---|
+| 1 | **§3.3 `UNIQUE (parent_id, name, deleted_at)` is silently ineffective.** SQL treats NULLs as distinct in unique constraints, so every live node (`deleted_at IS NULL`) and every top-level node (`parent_id IS NULL`) escaped it — the common case, not an edge case. Duplicate sibling names were allowed. | Replaced with a partial unique index over `COALESCE(parent_id, X'00')` scoped to live rows. Trashing a node now correctly frees its name. |
+| 2 | **A PID-based lockfile cannot detect staleness reliably.** PIDs are recycled and cross-host liveness is unknowable, so a crash could strand the vault permanently. | OS advisory lock (`msvcrt` / `fcntl`); the kernel releases it on process death. Verified by killing a holder mid-run. |
+
+---
+
 ## Commit log
 
 | Commit | Message |
@@ -93,6 +115,11 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | `7e6ecdf` | docs: add progress tracker |
 | `06bd09e` | ci: add quality and dependency-audit workflows |
 | `f2055b5` | feat(log): add structured logging with mandatory secret redaction |
+| `67122bf` | docs: mark M0 complete in progress tracker |
+| `58baf15` | feat(core): add vault schema and version-keyed migration runner |
+| `4f1659d` | feat(core): add cross-process single-writer vault lock |
+| `11633ab` | refactor(errors): give every deliberate failure a common root |
+| `c1b56e5` | feat(core): add vault open, create, and close |
 
 ---
 
