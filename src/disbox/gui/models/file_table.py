@@ -19,8 +19,11 @@ from enum import IntEnum
 from typing import Any, Final
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
+from PySide6.QtGui import QIcon
 
 from disbox.core.vault import Vault
+from disbox.gui.theme import icons
+from disbox.gui.theme.tokens import DARK, Palette
 
 __all__ = ["Column", "FileTableModel"]
 
@@ -72,6 +75,17 @@ def format_size(size: int) -> str:
     return f"{value:.1f} PB"  # pragma: no cover - loop always returns first
 
 
+def _display_value(row: Row, column: Column) -> str:
+    """Render one cell's text."""
+    if column is Column.NAME:
+        return row.name
+    if column is Column.SIZE:
+        return "" if row.kind == "dir" else format_size(row.size)
+    if column is Column.KIND:
+        return "Folder" if row.kind == "dir" else "File"
+    return format_timestamp(row.modified_at)
+
+
 def format_timestamp(raw: str) -> str:
     """Render a stored ISO timestamp for display, falling back to the raw text."""
     try:
@@ -89,10 +103,13 @@ class FileTableModel(QAbstractTableModel):
         parent: Any = None,
         *,
         page_size: int = _DEFAULT_PAGE_SIZE,
+        palette: Palette = DARK,
     ) -> None:
         """Present `vault` contents; call `set_directory` to choose one."""
         super().__init__(parent)
         self._vault = vault
+        self._palette = palette
+        self._icon_cache: dict[tuple[str, str], QIcon] = {}
         self._page_size = page_size
         self._directory: uuid.UUID | None = None
         self._row_count = 0
@@ -181,12 +198,19 @@ class FileTableModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
-        """Column titles for the horizontal header."""
-        if role != Qt.ItemDataRole.DisplayRole or orientation != Qt.Orientation.Horizontal:
+        """Column titles and alignment for the horizontal header."""
+        if orientation != Qt.Orientation.Horizontal:
             return None
         try:
             column = Column(section)
         except ValueError:  # Qt may probe sections beyond columnCount
+            return None
+
+        # A header centred over left-aligned content is the classic sign of an
+        # unstyled table; each header takes the alignment of its own column.
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            return int(icons.alignment_for_column(column is Column.SIZE))
+        if role != Qt.ItemDataRole.DisplayRole:
             return None
         return _HEADERS[column]
 
@@ -196,21 +220,44 @@ class FileTableModel(QAbstractTableModel):
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
         """Cell contents for the requested role."""
-        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
+        if not index.isValid():
             return None
         row = self._row_at(index.row())
         if row is None:
             return None
 
-        match Column(index.column()):
-            case Column.NAME:
-                return row.name
-            case Column.SIZE:
-                return "" if row.kind == "dir" else format_size(row.size)
-            case Column.KIND:
-                return "Folder" if row.kind == "dir" else "File"
-            case Column.MODIFIED:
-                return format_timestamp(row.modified_at)
+        # A type icon beside the name is what lets someone scan a folder
+        # without reading it. Cached because Qt asks for the same icon on every
+        # repaint, and re-rasterising an SVG per frame would show up in scroll.
+        if role == Qt.ItemDataRole.DecorationRole and index.column() == Column.NAME:
+            return self._icon_for(row)
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            numeric = Column(index.column()) is Column.SIZE
+            return int(icons.alignment_for_column(numeric))
+        if role != Qt.ItemDataRole.DisplayRole:
+            return None
+
+        return _display_value(row, Column(index.column()))
+
+    def set_palette(self, palette: Palette) -> None:
+        """Re-tint the type icons when the theme changes."""
+        self._palette = palette
+        self._icon_cache.clear()
+        if self._row_count:
+            self.dataChanged.emit(
+                self.index(0, Column.NAME),
+                self.index(self._row_count - 1, Column.NAME),
+                [Qt.ItemDataRole.DecorationRole],
+            )
+
+    def _icon_for(self, row: Row) -> QIcon:
+        """Return the tinted type icon for `row`, rasterising at most once."""
+        name, role = icons.icon_for_filename(row.name, is_directory=row.kind == "dir")
+        key = (name, role)
+        if key not in self._icon_cache:
+            colour = getattr(self._palette, role)
+            self._icon_cache[key] = icons.icon(name, colour, size=18, ratio=2.0)
+        return self._icon_cache[key]
 
     # ------------------------------------------------------------- fetching --
 

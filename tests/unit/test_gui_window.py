@@ -68,7 +68,7 @@ class TestConstruction:
         add(vault, "only.txt")
         win = MainWindow(vault)
         qtbot.addWidget(win)
-        assert "1" in win.statusBar().currentMessage()
+        assert "1 item" in win.status_text()
 
 
 class TestNavigation:
@@ -156,3 +156,36 @@ class TestSearch:
         window.apply_search("nothing-matches-this")
         assert visible_names(window) == []
         assert window.table_model.rowCount() == 0
+        assert "0 matches" in window.status_text()
+
+
+class TestChrome:
+    def test_breadcrumb_starts_at_the_vault_root(self, window: MainWindow) -> None:
+        assert window.breadcrumb_text() == "All files"
+
+    def test_type_icons_are_provided_for_every_row(self, vault: Vault, qtbot: QtBot) -> None:
+        """A folder must be scannable without reading each name."""
+        add(vault, "photo.jpg")
+        add(vault, "Archive", kind="dir")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+
+        model = win.table_model
+        for row in range(model.rowCount()):
+            decoration = model.data(model.index(row, Column.NAME), Qt.ItemDataRole.DecorationRole)
+            assert decoration is not None and not decoration.isNull()
+
+    def test_size_column_is_right_aligned(self, vault: Vault, qtbot: QtBot) -> None:
+        """Digits only line up when the column is right-aligned."""
+        add(vault, "a.bin")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+        alignment = win.table_model.data(
+            win.table_model.index(0, Column.SIZE), Qt.ItemDataRole.TextAlignmentRole
+        )
+        assert int(alignment) & int(Qt.AlignmentFlag.AlignRight)
+
+    def test_a_missing_backdrop_leaves_the_window_usable(self, window: MainWindow) -> None:
+        """Tests run headless, where no compositor material exists."""
+        assert window.isEnabled()
+        assert window.centralWidget() is not None
