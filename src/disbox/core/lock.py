@@ -27,18 +27,18 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
 
+from disbox.errors import VaultLockedError
+
 if sys.platform == "win32":
     import msvcrt
 else:
     import fcntl
 
+__all__ = ["FileLock", "VaultLockedError"]
+
 # Lock a byte past the diagnostics payload so the two never overlap; Windows
 # locks byte ranges, and writing into a range we hold would be needless risk.
 _LOCK_OFFSET: Final = 4096
-
-
-class VaultLockedError(Exception):
-    """Raised when another process already holds the vault open for writing."""
 
 
 class FileLock:

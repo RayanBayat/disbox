@@ -18,12 +18,19 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import Final
 
+from disbox.errors import MigrationError
+
+__all__ = [
+    "LATEST_VERSION",
+    "MIGRATIONS",
+    "Migration",
+    "MigrationError",
+    "current_version",
+    "migrate",
+]
+
 _SCHEMA_PACKAGE: Final = "disbox.core.schema"
 _FILENAME_PATTERN: Final = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
-
-
-class MigrationError(Exception):
-    """Raised when the migration set is malformed or cannot be applied."""
 
 
 @dataclass(frozen=True, slots=True)
