@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 105 passed |
+| Tests | ✅ | 111 passed |
 | Types | ✅ | `mypy --strict`, 23 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -87,7 +87,7 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | M1-2 | `Vault.open/create/close`, pragmas, lockfile | ✅ | OS advisory lock; survives an unclean kill |
 | M1-3 | Snapshot rotation via backup API | ✅ | Online Backup API + atomic rename; retention tested |
 | M1-4 | Journal writes behind a decorator | ✅ | Entry + mutation share one transaction |
-| M1-5 | Integrity check + restore from snapshot | ✅ | `quick_check` on every open; restore quarantines the damaged file |
+| M1-5 | Integrity check + restore from snapshot | ✅ | `quick_check` on every open; restore quarantines the damaged file; all 3 SPEC §11 invariants covered incl. parent cycles |
 | M1-6 | Export / import round-trip | ⚪ | Next |
 | M1-7 | FTS5 trigram index with sync triggers | ⚪ | Table exists; triggers pending |
 | M1-8 | 250k-node benchmark fixture | ⚪ | |
@@ -97,6 +97,7 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | # | Issue | Resolution |
 |---|---|---|
 | 1 | **§3.3 `UNIQUE (parent_id, name, deleted_at)` is silently ineffective.** SQL treats NULLs as distinct in unique constraints, so every live node (`deleted_at IS NULL`) and every top-level node (`parent_id IS NULL`) escaped it — the common case, not an edge case. Duplicate sibling names were allowed. | Replaced with a partial unique index over `COALESCE(parent_id, X'00')` scoped to live rows. Trashing a node now correctly frees its name. |
+| 4 | **Foreign keys cannot prevent a parent cycle.** A→B then repointing A at B leaves every row valid but the subtree unreachable, invisible to tree walks and able to hang a naive traversal. | Recursive CTE walks *down* from roots and reports the unreachable; `UNION` guarantees termination. |
 | 3 | **`sqlite3.connect()` used as a context manager never closes the connection** — it only commits or rolls back the transaction. Leaked handles surfaced as `PytestUnraisableExceptionWarning`. | Always `contextlib.closing(sqlite3.connect(...))`. |
 | 2 | **A PID-based lockfile cannot detect staleness reliably.** PIDs are recycled and cross-host liveness is unknowable, so a crash could strand the vault permanently. | OS advisory lock (`msvcrt` / `fcntl`); the kernel releases it on process death. Verified by killing a holder mid-run. |
 
@@ -125,6 +126,7 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | `b60da4b` | feat(core): add vault snapshots with retention policy |
 | `d79360f` | feat(core): add append-only journal with a journaled decorator |
 | `5808d24` | feat(core): add integrity checks and snapshot restore |
+| `2b52c74` | feat(core): detect parent cycles in the node tree |
 
 ---
 
