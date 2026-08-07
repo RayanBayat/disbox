@@ -16,7 +16,9 @@ classifiers = [
     "Topic :: System :: Archiving :: Backup",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "structlog>=26.1.0",
+]
 
 [project.urls]
 Repository = "https://github.com/rayanbayat/disbox"
