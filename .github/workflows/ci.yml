@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fail rather than silently reaching for a different interpreter.
+  UV_PYTHON_DOWNLOADS: only-managed
+
+jobs:
+  quality:
+    name: quality (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is the primary target; Linux guards against path,
+        # line-ending, and default-encoding assumptions.
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python and dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        # Qt needs an offscreen platform on headless runners.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest -q --cov --cov-report=term-missing
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Audit the lockfile rather than the environment: --no-emit-project drops
+      # our own unpublished package, which pip-audit cannot resolve on PyPI.
+      - name: Export pinned dependencies
+        run: uv export --group dev --no-emit-project --format requirements-txt -o requirements-audit.txt
+
+      - name: Audit dependencies for known vulnerabilities
+        run: uv run --with pip-audit pip-audit --strict -r requirements-audit.txt
