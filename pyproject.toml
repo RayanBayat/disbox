@@ -1,0 +1,137 @@
+[project]
+name = "disbox"
+version = "0.1.0"
+description = "Encrypted, deduplicated file storage on Discord with a local-first vault."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Rayan Bayat" }]
+keywords = ["storage", "discord", "encryption", "backup"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Archiving :: Backup",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/rayanbayat/disbox"
+
+# Runtime dependencies are added by the milestone that first needs them,
+# so the manifest never lists a package the code does not import.
+
+[dependency-groups] # PEP 735
+dev = [
+    "pytest>=9",
+    "pytest-cov>=7",
+    "hypothesis>=6.165",
+    "mypy>=2.3",
+    "ruff>=0.16",
+]
+
+[build-system] # PEP 517/518
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/disbox"]
+
+# ---------------------------------------------------------------- ruff ----
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+# Markdown holds illustrative sketches, not compiled code; ruff must not
+# reformat the annotated snippets in ANALYSIS.md and SPEC.md.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "D",         # pydocstyle (PEP 257)
+    "UP",        # pyupgrade
+    "ANN",       # flake8-annotations (PEP 484)
+    "S",         # flake8-bandit (security)
+    "B",         # flake8-bugbear
+    "A",         # flake8-builtins
+    "C4",        # flake8-comprehensions
+    "DTZ",       # flake8-datetimez (no naive datetimes)
+    "PTH",       # flake8-use-pathlib
+    "RET",       # flake8-return
+    "SIM",       # flake8-simplify
+    "ARG",       # flake8-unused-arguments
+    "TID",       # flake8-tidy-imports
+    "PL",        # pylint
+    "RUF",       # ruff-specific
+    "ICN",       # flake8-import-conventions
+]
+# Imports belong at the top of the file (PEP 8). E402 catches module-level
+# imports placed after code; PLC0415 catches imports hidden inside functions.
+extend-select = ["E402", "PLC0415"]
+ignore = [
+    "ANN401", # allow Any where genuinely unavoidable (documented at use site)
+    "D107",   # __init__ documented in the class docstring
+    "PLR0913",# argument count is governed by review, not a hard cap
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "D100", "D101", "D102", "D103", "D104", # tests document themselves by name
+    "S101",  # assert is the point of a test
+    "PLR2004", # magic values are fine in assertions
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------- mypy ----
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+show_error_codes = true
+pretty = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = true
+
+# -------------------------------------------------------------- pytest ----
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config --showlocals"
+testpaths = ["tests"]
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+    "slow: deselect with '-m \"not slow\"'",
+    "live: hits a real external service; never runs in CI",
+]
+
+# ------------------------------------------------------------ coverage ----
+[tool.coverage.run]
+source = ["src/disbox"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
