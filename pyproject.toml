@@ -17,6 +17,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "argon2-cffi>=25.1.0",
+    "blake3>=1.0.9",
+    "cbor2>=6.1.4",
+    "cryptography>=50.0.0",
     "pyside6>=6.11.1",
     "structlog>=26.1.0",
 ]

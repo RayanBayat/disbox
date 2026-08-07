@@ -22,5 +22,9 @@ class MigrationError(VaultError):
     """The migration set is malformed, or a migration failed to apply."""
 
 
+class CryptoError(DisboxError):
+    """A key could not be derived, or data failed to decrypt or authenticate."""
+
+
 class IntegrityError(VaultError):
     """The vault failed an internal consistency check."""
