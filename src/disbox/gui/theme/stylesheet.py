@@ -32,6 +32,38 @@ QWidget#Root {{
     background: {p.window};
 }}
 
+QWidget#TitleBar {{
+    background: transparent;
+}}
+
+QLabel#TitleText {{
+    font-size: {Type.BODY}px;
+    font-weight: 600;
+    color: {p.text_muted};
+}}
+
+/* Window controls follow the platform's shape: square, full-height, and
+   flush to the corner, so they land where muscle memory expects. */
+QToolButton#WindowControl {{
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}}
+QToolButton#WindowControl:hover {{ background: {p.surface_hover}; }}
+QToolButton#WindowControl:pressed {{ background: {p.surface_active}; }}
+QToolButton#CloseButton:hover {{ background: {p.danger}; }}
+
+QFrame#MeterTrack {{
+    background: {p.surface_hover};
+    border: none;
+    border-radius: 3px;
+}}
+QFrame#MeterFill {{
+    background: {p.accent};
+    border: none;
+    border-radius: 3px;
+}}
+
 QWidget#Sidebar {{
     background: {p.surface};
     border-right: 1px solid {p.border};
@@ -58,6 +90,12 @@ QLabel#SectionLabel {{
     color: {p.text_subtle};
     letter-spacing: 0.6px;
     padding: {Space.SM}px {Space.MD}px {Space.XS}px {Space.MD}px;
+}}
+
+QLabel#MeterCaption {{
+    font-size: {Type.BODY}px;
+    font-weight: 600;
+    color: {p.text};
 }}
 
 QLabel#StatusText {{
@@ -153,6 +191,7 @@ QTableView::item {{
     border: none;
     border-radius: {Radius.SM}px;
     padding: 0px {Space.SM}px;
+    color: {p.text_muted};
 }}
 QTableView::item:hover {{ background: {p.surface_hover}; }}
 QTableView::item:selected {{ background: {p.accent_subtle}; color: {p.text}; }}
@@ -162,7 +201,7 @@ QHeaderView::section {{
     border: none;
     border-bottom: 1px solid {p.border};
     padding: {Space.SM}px;
-    color: {p.text_subtle};
+    color: {p.text_muted};
     font-size: {Type.CAPTION}px;
     font-weight: 600;
 }}

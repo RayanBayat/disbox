@@ -30,6 +30,12 @@ _PATHS: Final[dict[str, str]] = {
     "chevron-down": "M6 9l6 6 6-6",
     "search": "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35",
     "x": "M18 6L6 18M6 6l12 12",
+    # Window controls. Drawn lighter than the rest because they sit in the
+    # caption, where they should be reachable but never draw the eye.
+    "minimise": "M5 12h14",
+    "maximise": "M6 6h12v12H6z",
+    "restore": "M9 9V5h10v10h-4M5 9h10v10H5z",
+    "close": "M6 6l12 12M18 6L6 18",
     # Places
     "vault": "M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z",
     "trash": (

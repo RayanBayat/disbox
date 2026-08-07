@@ -14,12 +14,12 @@ database being able to disagree.
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import IntEnum
 from typing import Any, Final
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon
 
 from disbox.core.vault import Vault
 from disbox.gui.theme import icons
@@ -36,20 +36,24 @@ _MAX_CACHED_PAGES: Final = 8
 # Binary, matching how file managers report sizes.
 _BYTES_PER_UNIT: Final = 1024
 
+# Thresholds for relative time, in seconds.
+_MINUTE: Final = 60
+_HOUR: Final = 60 * _MINUTE
+_DAY: Final = 24 * _HOUR
+_WEEK: Final = 7 * _DAY
+
 
 class Column(IntEnum):
     """Columns of the file table, in display order."""
 
     NAME = 0
     SIZE = 1
-    KIND = 2
-    MODIFIED = 3
+    MODIFIED = 2
 
 
 _HEADERS: Final = {
     Column.NAME: "Name",
     Column.SIZE: "Size",
-    Column.KIND: "Type",
     Column.MODIFIED: "Modified",
 }
 
@@ -75,23 +79,54 @@ def format_size(size: int) -> str:
     return f"{value:.1f} PB"  # pragma: no cover - loop always returns first
 
 
+def _tooltip(row: Row, column: Column) -> str | None:
+    """Extra detail for a cell, shown on hover.
+
+    The Modified column displays an approximation such as "2 days ago", so the
+    exact stamp has to stay reachable somewhere.
+    """
+    if column is Column.MODIFIED:
+        return row.modified_at
+    if column is Column.NAME:
+        return row.name
+    return None
+
+
 def _display_value(row: Row, column: Column) -> str:
     """Render one cell's text."""
     if column is Column.NAME:
         return row.name
     if column is Column.SIZE:
         return "" if row.kind == "dir" else format_size(row.size)
-    if column is Column.KIND:
-        return "Folder" if row.kind == "dir" else "File"
     return format_timestamp(row.modified_at)
 
 
-def format_timestamp(raw: str) -> str:
-    """Render a stored ISO timestamp for display, falling back to the raw text."""
+def format_timestamp(raw: str, *, now: datetime | None = None) -> str:
+    """Render a stored timestamp the way a person would say it.
+
+    Recent times read as "2 hours ago" because that is what someone scanning a
+    folder actually wants; anything older falls back to a date. The exact value
+    is still available in the cell's tooltip.
+    """
     try:
-        return datetime.fromisoformat(raw).strftime("%Y-%m-%d %H:%M")
+        moment = datetime.fromisoformat(raw)
     except ValueError:
         return raw
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+
+    seconds = ((now or datetime.now(UTC)) - moment).total_seconds()
+    if seconds < 0 or seconds >= _WEEK:
+        return moment.strftime("%d %b %Y")
+    if seconds < _MINUTE:
+        return "Just now"
+    if seconds < _HOUR:
+        return f"{int(seconds // _MINUTE)} min ago"
+    if seconds < _DAY:
+        hours = int(seconds // _HOUR)
+        return f"{hours} hour{'' if hours == 1 else 's'} ago"
+    days = int(seconds // _DAY)
+    return f"{days} day{'' if days == 1 else 's'} ago"
 
 
 class FileTableModel(QAbstractTableModel):
@@ -110,6 +145,8 @@ class FileTableModel(QAbstractTableModel):
         self._vault = vault
         self._palette = palette
         self._icon_cache: dict[tuple[str, str], QIcon] = {}
+        self._name_font = QFont()
+        self._name_font.setWeight(QFont.Weight.DemiBold)
         self._page_size = page_size
         self._directory: uuid.UUID | None = None
         self._row_count = 0
@@ -214,30 +251,45 @@ class FileTableModel(QAbstractTableModel):
             return None
         return _HEADERS[column]
 
-    def data(
+    def data(  # noqa: PLR0911 - one branch per Qt role; a dispatch dict would
+        # allocate on every cell of every repaint, which is the one place in
+        # this class where that cost is actually visible.
         self,
         index: QModelIndex | QPersistentModelIndex,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
         """Cell contents for the requested role."""
-        if not index.isValid():
-            return None
-        row = self._row_at(index.row())
+        row = self._row_at(index.row()) if index.isValid() else None
         if row is None:
             return None
 
         # A type icon beside the name is what lets someone scan a folder
         # without reading it. Cached because Qt asks for the same icon on every
         # repaint, and re-rasterising an SVG per frame would show up in scroll.
-        if role == Qt.ItemDataRole.DecorationRole and index.column() == Column.NAME:
-            return self._icon_for(row)
-        if role == Qt.ItemDataRole.TextAlignmentRole:
-            numeric = Column(index.column()) is Column.SIZE
-            return int(icons.alignment_for_column(numeric))
-        if role != Qt.ItemDataRole.DisplayRole:
-            return None
+        if role == Qt.ItemDataRole.DecorationRole:
+            return self._icon_for(row) if index.column() == Column.NAME else None
+        column = Column(index.column())
+        match role:
+            case Qt.ItemDataRole.DisplayRole:
+                return _display_value(row, column)
+            case Qt.ItemDataRole.ToolTipRole:
+                return _tooltip(row, column)
+            case Qt.ItemDataRole.TextAlignmentRole:
+                return int(icons.alignment_for_column(column is Column.SIZE))
+            case Qt.ItemDataRole.FontRole | Qt.ItemDataRole.ForegroundRole:
+                # The name is what people scan; size and date support it and
+                # should recede rather than compete.
+                return self._name_emphasis(column, role)
+            case _:
+                return None
 
-        return _display_value(row, Column(index.column()))
+    def _name_emphasis(self, column: Column, role: int) -> object:
+        """Weight and colour that lift the name column above its neighbours."""
+        if column is not Column.NAME:
+            return None
+        if role == Qt.ItemDataRole.FontRole:
+            return self._name_font
+        return QBrush(QColor(self._palette.text))
 
     def set_palette(self, palette: Palette) -> None:
         """Re-tint the type icons when the theme changes."""

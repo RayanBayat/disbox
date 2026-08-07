@@ -17,11 +17,12 @@ engine; the toolbar deliberately offers no button that would do nothing.
 import uuid
 from typing import Final
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -38,20 +39,23 @@ from PySide6.QtWidgets import (
 
 from disbox.core.search import search
 from disbox.core.vault import Vault
-from disbox.gui.models.file_table import Column, FileTableModel
-from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons, set_dark_titlebar
+from disbox.gui.models.file_table import Column, FileTableModel, format_size
+from disbox.gui.theme import Backdrop, Motion, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK
+from disbox.gui.views.chrome import FramelessMixin, TitleBar
 
 __all__ = ["MainWindow"]
 
 _SEARCH_RESULT_LIMIT: Final = 500
-_ROW_HEIGHT: Final = 34
+_ROW_HEIGHT: Final = 40
 _SIDEBAR_WIDTH: Final = 208
 _ICON_BUTTON: Final = 30
 
 
-class MainWindow(QMainWindow):
+# mypy flags nativeEvent as conflicting across the two bases; the mixin's
+# signature matches what Qt actually calls, and the runtime override works.
+class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     """Browse a vault: navigate directories, search, and inspect."""
 
     def __init__(self, vault: Vault, palette: Palette = DARK) -> None:
@@ -80,7 +84,6 @@ class MainWindow(QMainWindow):
     def _apply_window_material(self) -> None:
         """Request a compositor backdrop, and stay opaque if there is none."""
         handle = int(self.winId())
-        set_dark_titlebar(handle, dark=self._palette.is_dark)
         if apply_backdrop(handle, Backdrop.MICA):
             # Only stop painting our own background once the material is
             # confirmed; otherwise the window would render as a hole.
@@ -106,24 +109,25 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, Space.LG, 0, Space.MD)
         layout.setSpacing(0)
 
-        brand_row = QHBoxLayout()
-        brand_row.setContentsMargins(Space.LG, 0, Space.LG, Space.LG)
-        brand_row.setSpacing(Space.SM)
+        vault_row = QHBoxLayout()
+        vault_row.setContentsMargins(Space.LG, 0, Space.LG, Space.LG)
+        vault_row.setSpacing(Space.SM)
         mark = QLabel()
-        mark.setPixmap(icons.pixmap("shield", self._palette.accent, size=20, ratio=2.0))
-        name = QLabel("Disbox")
+        mark.setPixmap(icons.pixmap("vault", self._palette.accent, size=18, ratio=2.0))
+        name = QLabel(self._vault.path.stem)
         name.setObjectName("BrandName")
-        brand_row.addWidget(mark)
-        brand_row.addWidget(name)
-        brand_row.addStretch(1)
-        layout.addLayout(brand_row)
+        name.setToolTip(str(self._vault.path))
+        vault_row.addWidget(mark)
+        vault_row.addWidget(name)
+        vault_row.addStretch(1)
+        layout.addLayout(vault_row)
 
         section = QLabel("PLACES")
         section.setObjectName("SectionLabel")
         layout.addWidget(section)
 
         self._nav_buttons: dict[str, QPushButton] = {}
-        for key, label, icon_name in (("vault", "All files", "vault"),):
+        for key, label, icon_name in (("vault", "All files", "vault"),):  # more places with M7
             button = QPushButton(f"  {label}")
             button.setObjectName("NavItem")
             button.setIcon(icons.icon(icon_name, self._palette.text_muted, size=18, ratio=2.0))
@@ -136,12 +140,41 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
 
         layout.addStretch(1)
-
-        self._vault_label = QLabel(self._vault.path.stem)
-        self._vault_label.setObjectName("StatusText")
-        self._vault_label.setContentsMargins(Space.LG, 0, Space.LG, 0)
-        layout.addWidget(self._vault_label)
+        layout.addWidget(self._build_storage_meter())
         return sidebar
+
+    def _build_storage_meter(self) -> QWidget:
+        """Show what the vault holds, so the sidebar ends on information."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(Space.LG, Space.SM, Space.LG, Space.SM)
+        layout.setSpacing(Space.XS)
+
+        row = self._vault.connection.execute(
+            "SELECT count(*), coalesce(sum(size), 0) FROM nodes "
+            "WHERE deleted_at IS NULL AND kind = 'file'"
+        ).fetchone()
+        stored = format_size(row[1])
+
+        caption = QLabel(f"{stored} stored")
+        caption.setObjectName("MeterCaption")
+        detail = QLabel(f"{row[0]:,} file{'' if row[0] == 1 else 's'}")
+        detail.setObjectName("StatusText")
+
+        # No quota exists to divide by, so the bar is a presence indicator
+        # rather than a percentage; it must not imply a limit we cannot know.
+        track = QFrame()
+        track.setObjectName("MeterTrack")
+        track.setFixedHeight(6)
+        fill = QFrame(track)
+        fill.setObjectName("MeterFill")
+        fill.setFixedHeight(6)
+        fill.setFixedWidth(int(_SIDEBAR_WIDTH * 0.42))
+
+        layout.addWidget(caption)
+        layout.addWidget(track)
+        layout.addWidget(detail)
+        return panel
 
     def _build_header(self) -> QWidget:
         """Navigation, breadcrumb, and search."""
@@ -210,11 +243,9 @@ class MainWindow(QMainWindow):
         header = table.horizontalHeader()
         header.setSectionResizeMode(Column.NAME, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(Column.SIZE, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(Column.KIND, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(Column.MODIFIED, QHeaderView.ResizeMode.Fixed)
         header.setHighlightSections(False)
         table.setColumnWidth(Column.SIZE, 110)
-        table.setColumnWidth(Column.KIND, 100)
         table.setColumnWidth(Column.MODIFIED, 160)
         return table
 
@@ -246,7 +277,15 @@ class MainWindow(QMainWindow):
         """Assemble sidebar, header, content, and status strip."""
         root = QWidget()
         root.setObjectName("Root")
-        root_layout = QHBoxLayout(root)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.title_bar = TitleBar(self, self._palette)
+        outer.addWidget(self.title_bar)
+
+        body = QWidget()
+        root_layout = QHBoxLayout(body)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
         root_layout.addWidget(self._build_sidebar())
@@ -272,7 +311,17 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self._status)
 
         root_layout.addWidget(content, 1)
+        outer.addWidget(body, 1)
         self.setCentralWidget(root)
+        self.install_frameless_chrome(self.title_bar)
+
+        # A short cross-fade on the content makes a directory change read as
+        # movement rather than a jump cut, without delaying anything.
+        self._fade_effect = QGraphicsOpacityEffect(self._stack)
+        self._stack.setGraphicsEffect(self._fade_effect)
+        self._fade = QPropertyAnimation(self._fade_effect, b"opacity", self)
+        self._fade.setDuration(Motion.FAST)
+        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         for sequence, slot in (
             (QKeySequence.StandardKey.Back, self.navigate_back),
@@ -365,6 +414,7 @@ class MainWindow(QMainWindow):
         self.table_model.set_directory(self._directory)
         self._set_crumbs(self._compute_crumbs())
 
+        self._play_fade()
         count = self.table_model.rowCount()
         self._empty_title.setText("Nothing here yet")
         self._empty_hint.setText("This folder is empty.")
@@ -372,6 +422,15 @@ class MainWindow(QMainWindow):
         self._status.setText(f"{count} item{'' if count == 1 else 's'}")
         self._up_button.setEnabled(self._directory is not None)
         self._back_button.setEnabled(bool(self._history))
+
+    def _play_fade(self) -> None:
+        """Fade the content back in after its contents change."""
+        if not hasattr(self, "_fade"):
+            return  # first refresh runs before the animation is built
+        self._fade.stop()
+        self._fade.setStartValue(0.35)
+        self._fade.setEndValue(1.0)
+        self._fade.start()
 
     def _compute_crumbs(self) -> list[tuple[str, uuid.UUID | None]]:
         """Walk from the current directory to the root, building the trail."""
