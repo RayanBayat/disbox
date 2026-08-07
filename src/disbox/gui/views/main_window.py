@@ -44,6 +44,7 @@ from disbox.gui.theme.backdrop import round_window_corners
 from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
+from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
 
 __all__ = ["MainWindow"]
@@ -327,6 +328,9 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         content_layout.addWidget(self._status)
 
         root_layout.addWidget(content, 1)
+        self.details = DetailsPane(self._vault, self._palette)
+        root_layout.addWidget(self.details)
+        self._table.selectionModel().selectionChanged.connect(self._on_selection_changed)
         outer.addWidget(body, 1)
         self.setCentralWidget(root)
         self.install_frameless_chrome(self.title_bar)
@@ -356,6 +360,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.setStyleSheet(build_stylesheet(palette))
         self.table_model.set_palette(palette)
         self.row_delegate.set_palette(palette)
+        self.details.set_palette(palette)
         self._retint_icons()
         self._set_crumbs(self._crumbs)
         self.update()
@@ -458,6 +463,14 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._status.setText(f"{count} item{'' if count == 1 else 's'}")
         self._up_button.setEnabled(self._directory is not None)
         self._back_button.setEnabled(bool(self._history))
+
+    def _on_selection_changed(self) -> None:
+        """Describe the selection, but only when it is unambiguous."""
+        rows = {index.row() for index in self._table.selectionModel().selectedRows()}
+        if len(rows) != 1:
+            self.details.show_node(None)
+            return
+        self.details.show_node(self.table_model.node_id_at(next(iter(rows))))
 
     def _on_sort_changed(self, column: int, order: Qt.SortOrder) -> None:
         """Re-read the directory in the requested order."""

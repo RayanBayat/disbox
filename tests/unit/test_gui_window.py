@@ -189,3 +189,34 @@ class TestChrome:
         """Tests run headless, where no compositor material exists."""
         assert window.isEnabled()
         assert window.centralWidget() is not None
+
+
+class TestDetailsPane:
+    def test_hidden_until_something_is_selected(self, window: MainWindow) -> None:
+        assert window.details.node_id is None
+
+    def test_describes_a_single_selection(self, vault: Vault, qtbot: QtBot) -> None:
+        node_id = add(vault, "report.pdf")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+        win.details.show_node(node_id)
+        assert win.details.node_id == node_id
+
+    def test_multiple_selection_shows_nothing(self, vault: Vault, qtbot: QtBot) -> None:
+        """A single-item panel cannot honestly describe several rows."""
+        add(vault, "a.txt")
+        add(vault, "b.txt")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+        win._table.selectAll()
+        win._on_selection_changed()
+        assert win.details.node_id is None
+
+    def test_a_vanished_node_hides_the_pane(self, vault: Vault, qtbot: QtBot) -> None:
+        node_id = add(vault, "doomed.txt")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+        with vault.connection as conn:
+            conn.execute("DELETE FROM nodes WHERE id = ?", (node_id.bytes,))
+        win.details.show_node(node_id)
+        assert not win.details.isVisible()
