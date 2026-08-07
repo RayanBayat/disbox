@@ -5,7 +5,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from hypothesis import given, settings
@@ -21,6 +21,10 @@ from disbox.core.portability import (
 from disbox.core.vault import Vault
 from disbox.errors import VaultError
 from tests.unit.test_vault import KEYS
+
+# Unicode "surrogate" category. Annotated because Hypothesis types this
+# parameter as a collection of literals, which a bare tuple widens away.
+SURROGATE_CATEGORY: tuple[Literal["Cs"]] = ("Cs",)
 
 # Tables whose contents define the vault's logical identity. Journal history and
 # in-flight upload sessions are deliberately excluded from an export.
@@ -167,12 +171,57 @@ class TestImportGuards:
         assert not target.exists()
 
 
+class TestUndecodableNames:
+    """Names that cannot be encoded as UTF-8 never enter the vault.
+
+    Python turns undecodable bytes in a path into unpaired surrogates via
+    surrogateescape, so such names are reachable in principle. The property
+    test below generated one and exposed the question.
+
+    SQLite settles it: the driver encodes string parameters as strict UTF-8 and
+    refuses the insert. That is the outcome worth having, because it means the
+    vault can never hold a name the export is unable to write -- which is what
+    keeps the recovery path total.
+    """
+
+    def test_a_name_that_cannot_be_encoded_is_refused_by_storage(self, vault: Vault) -> None:
+        with pytest.raises(UnicodeEncodeError), vault.connection as conn:
+            conn.execute(
+                "INSERT INTO nodes (id, parent_id, name, kind, created_at, modified_at) "
+                "VALUES (?, NULL, ?, 'file', '2026-01-01', '2026-01-01')",
+                (uuid.uuid7().bytes, "broken-\ud800-name.txt"),
+            )
+
+    def test_ordinary_non_ascii_names_round_trip(self, vault: Vault, tmp_path: Path) -> None:
+        """Only unpaired surrogates are refused; real-world names must work."""
+        for name in ("naive-café.txt", "日本語.pdf", "party-\U0001f389.zip"):
+            with vault.connection as conn:
+                conn.execute(
+                    "INSERT INTO nodes (id, parent_id, name, kind, created_at, modified_at) "
+                    "VALUES (?, NULL, ?, 'file', '2026-01-01', '2026-01-01')",
+                    (uuid.uuid7().bytes, name),
+                )
+        before = logical_dump(vault)
+        export_path = tmp_path / "export.json"
+        write_export(vault, export_path)
+        vault.close()
+
+        with import_vault(read_export(export_path), tmp_path / "restored.dbx") as restored:
+            assert logical_dump(restored) == before
+
+
 class TestRoundTripProperty:
     @settings(max_examples=25, deadline=None)
     @given(
         names=st.lists(
             st.text(
-                alphabet=st.characters(min_codepoint=32, blacklist_characters="/\x7f"),
+                # Surrogates are excluded because storage rejects them outright.
+                # TestUndecodableNames covers that behaviour directly.
+                alphabet=st.characters(
+                    min_codepoint=32,
+                    blacklist_characters="/\x7f",
+                    blacklist_categories=SURROGATE_CATEGORY,
+                ),
                 min_size=1,
                 max_size=40,
             ).filter(lambda s: s.strip() == s and s != ""),
