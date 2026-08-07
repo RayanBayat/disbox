@@ -82,3 +82,21 @@ class TestEndToEnd:
         assert output, "logger produced no output"
         assert BOT_TOKEN not in output
         assert WEBHOOK_URL.rsplit("/", 1)[1] not in output
+
+    def test_logging_survives_stdout_being_replaced_after_configure(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Binding sys.stdout at configure time would freeze a stale stream.
+
+        Regression test: the sink must resolve stdout per write, or a GUI
+        redirecting output -- or a test harness swapping in a capture buffer --
+        leaves the logger writing into a closed file.
+        """
+        configure(level="INFO", json_output=True)
+        log = get_logger(__name__)
+
+        log.info("first")
+        capsys.readouterr()  # pytest swaps the capture buffer underneath us here
+
+        log.info("second")
+        assert "second" in capsys.readouterr().out

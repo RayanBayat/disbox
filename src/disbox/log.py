@@ -19,7 +19,7 @@ import logging
 import re
 import sys
 from collections.abc import Mapping
-from typing import Any, Final
+from typing import Any, Final, TextIO, cast
 
 import structlog
 from structlog.typing import EventDict, WrappedLogger
@@ -95,6 +95,24 @@ def _scrub(value: Any, *, key: str | None = None) -> Any:
     return value
 
 
+class _LateBoundStdout:
+    """A sink that resolves ``sys.stdout`` at write time.
+
+    Passing ``sys.stdout`` directly to a logger factory freezes whichever
+    stream was installed when logging was configured. Anything that later
+    replaces stdout -- a GUI redirecting output, a test harness capturing it --
+    then leaves the logger writing to a stale and possibly closed file.
+    """
+
+    def write(self, message: str) -> int:
+        """Write to the stdout that is current right now."""
+        return sys.stdout.write(message)
+
+    def flush(self) -> None:
+        """Flush the stdout that is current right now."""
+        sys.stdout.flush()
+
+
 def redact_processor(
     logger: WrappedLogger,  # noqa: ARG001 - required by the structlog processor signature
     method_name: str,  # noqa: ARG001 - required by the structlog processor signature
@@ -150,7 +168,9 @@ def configure(*, level: str = "INFO", json_output: bool = False) -> None:
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(levels[level.upper()]),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        # structlog types the sink as TextIO but only ever calls write and
+        # flush on it, both of which _LateBoundStdout provides.
+        logger_factory=structlog.PrintLoggerFactory(file=cast("TextIO", _LateBoundStdout())),
         cache_logger_on_first_use=False,
     )
 
