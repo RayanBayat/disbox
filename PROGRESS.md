@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M8a — GUI skeleton (pulled forward)
+**Branch:** `main` · **Current milestone:** M1 complete → M2 (crypto) next
 
 ---
 
@@ -13,7 +13,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | Milestone | Scope | Status | Done |
 |---|---|---|---:|
 | **M0** | Bootstrap: tooling, git, CI | ✅ Complete | 7 / 7 |
-| **M1** | Vault (SQLite, snapshots, integrity) | 🟡 In progress | 7 / 8 |
+| **M1** | Vault (SQLite, snapshots, integrity) | ✅ Complete | 8 / 8 |
 | M2 | Crypto (Argon2id, AES-GCM, headers) | ⚪ Not started | 0 / 7 |
 | M3 | Chunking & manifest (FastCDC, Merkle) | ⚪ Not started | 0 / 5 |
 | M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
@@ -23,7 +23,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **17 / 81** |
+| | **Total** | | **18 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,12 +33,12 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 167 passed |
+| Tests | ✅ | 169 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
 | CI | ✅ | Windows + Linux matrix; lockfile audited, 0 vulnerabilities |
-| Coverage | ⚪ | Enforced from M1-8 onward |
+| Coverage | ✅ | 86% overall, above the 85% floor |
 
 ---
 
@@ -90,7 +90,7 @@ Carried from `SPEC.md` §14 — none blocking, each has a working default:
 | M1-5 | Integrity check + restore from snapshot | ✅ | `quick_check` on every open; restore quarantines the damaged file; all 3 SPEC §11 invariants covered incl. parent cycles |
 | M1-6 | Export / import round-trip | ✅ | Readable JSON; Hypothesis property test over random trees |
 | M1-7 | FTS5 trigram index with sync triggers | ✅ | Migration 0002; search 1.0–1.8 ms at 250k nodes vs 50 ms budget |
-| M1-8 | 250k-node benchmark fixture | 🟡 | `docs/scripts/bench_vault.py` written; needs a pytest fixture + CI marker |
+| M1-8 | 250k-node scale guards | ✅ | `tests/perf/`, `-m slow`, own CI job. Query-plan assertions verified by dropping the index |
 
 ### Corrections to SPEC.md found while building
 
@@ -182,6 +182,8 @@ uv run ruff format .         # format
 - **Naming a method `list` shadows the builtin inside the class body**, so a `-> list[X]` annotation on a sibling method resolves to the method. Caught by mypy.
 - **Qt's `offscreen` platform renders no glyphs** — screenshots come out as tofu boxes. Use `QT_QPA_PLATFORM=windows` for any visual check; `offscreen` is still right for tests.
 - **A passing GUI test can hide a visibly broken UI.** Assert on what the model displays, never on the widget's internal state.
+- **Assert query plans, not just timings,** for performance guards — plans are exact and hardware-independent.
+- **SQLite refuses to store strings that are not valid UTF-8** (unpaired surrogates), which is why the export can use strict encoding.
 - **Benchmarks must `flush=True` or write to a file.** A buffered benchmark looked hung for 10 minutes while it was actually running.
 - **Schema is at version 3.** Migrations chain automatically; add `000N_name.sql` to `src/disbox/core/schema/`.
 - **`structlog.configure` mutates global state.** An autouse fixture in `tests/conftest.py` resets it between tests.
