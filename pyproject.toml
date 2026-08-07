@@ -21,6 +21,9 @@ dependencies = [
     "structlog>=26.1.0",
 ]
 
+[project.gui-scripts]
+disbox = "disbox.gui.app:main"
+
 [project.urls]
 Repository = "https://github.com/rayanbayat/disbox"
 

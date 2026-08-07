@@ -12,6 +12,7 @@ database being able to disagree.
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
@@ -96,6 +97,7 @@ class FileTableModel(QAbstractTableModel):
         self._directory: uuid.UUID | None = None
         self._row_count = 0
         self._pages: dict[int, list[Row]] = {}
+        self._results: list[Row] | None = None
 
     # ----------------------------------------------------------- navigation --
 
@@ -103,9 +105,46 @@ class FileTableModel(QAbstractTableModel):
         """Show the contents of `directory`, or the vault root when None."""
         self.beginResetModel()
         self._directory = directory
+        self._results = None
         self._pages.clear()
         self._row_count = self._count_rows()
         self.endResetModel()
+
+    def set_results(self, node_ids: Sequence[uuid.UUID]) -> None:
+        """Show an explicit set of nodes instead of a directory.
+
+        Used for search, where matches come from all over the tree and have no
+        common parent. The set is bounded by the caller's result limit, so it is
+        fetched in one go rather than paged.
+        """
+        self.beginResetModel()
+        self._directory = None
+        self._pages.clear()
+        self._results = self._fetch_nodes(node_ids)
+        self._row_count = len(self._results)
+        self.endResetModel()
+
+    def _fetch_nodes(self, node_ids: Sequence[uuid.UUID]) -> list[Row]:
+        """Load full rows for `node_ids`, preserving the order given."""
+        if not node_ids:
+            return []
+        placeholders = ", ".join("?" for _ in node_ids)
+        cursor = self._vault.connection.execute(
+            "SELECT id, name, kind, size, modified_at FROM nodes "  # noqa: S608 - placeholders only
+            f"WHERE id IN ({placeholders})",
+            tuple(node_id.bytes for node_id in node_ids),
+        )
+        by_id = {
+            uuid.UUID(bytes=record[0]): Row(
+                node_id=uuid.UUID(bytes=record[0]),
+                name=record[1],
+                kind=record[2],
+                size=record[3],
+                modified_at=record[4],
+            )
+            for record in cursor.fetchall()
+        }
+        return [by_id[node_id] for node_id in node_ids if node_id in by_id]
 
     def refresh(self) -> None:
         """Re-read the current directory from the vault."""
@@ -118,6 +157,8 @@ class FileTableModel(QAbstractTableModel):
 
     def rows_cached(self) -> int:
         """Number of rows currently held in memory. Used by tests and diagnostics."""
+        if self._results is not None:
+            return len(self._results)
         return sum(len(page) for page in self._pages.values())
 
     # -------------------------------------------------------- Qt model API --
@@ -199,6 +240,8 @@ class FileTableModel(QAbstractTableModel):
         """Return the row at `row`, loading its page if necessary."""
         if row < 0 or row >= self._row_count:
             return None
+        if self._results is not None:
+            return self._results[row]
         page_number, offset = divmod(row, self._page_size)
         page = self._pages.get(page_number)
         if page is None:
