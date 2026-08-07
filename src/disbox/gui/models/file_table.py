@@ -307,12 +307,16 @@ class FileTableModel(QAbstractTableModel):
                 return None
 
     def _name_emphasis(self, column: Column, role: int) -> object:
-        """Weight and colour that lift the name column above its neighbours."""
-        if column is not Column.NAME:
-            return None
+        """Weight and colour that lift the name column above its neighbours.
+
+        Both come from the model rather than the stylesheet: a colour set on
+        QTableView::item overrides ForegroundRole, which silently discarded
+        this and left every cell the same weight.
+        """
         if role == Qt.ItemDataRole.FontRole:
-            return self._name_font
-        return QBrush(QColor(self._palette.text))
+            return self._name_font if column is Column.NAME else None
+        colour = self._palette.text if column is Column.NAME else self._palette.text_muted
+        return QBrush(QColor(colour))
 
     def set_palette(self, palette: Palette) -> None:
         """Re-tint the type icons when the theme changes."""

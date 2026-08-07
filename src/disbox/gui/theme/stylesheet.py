@@ -191,7 +191,6 @@ QTableView::item {{
     border: none;
     border-radius: {Radius.SM}px;
     padding: 0px {Space.SM}px;
-    color: {p.text_muted};
 }}
 QTableView::item:hover {{ background: {p.surface_hover}; }}
 QTableView::item:selected {{ background: {p.accent_subtle}; color: {p.text}; }}
@@ -205,7 +204,33 @@ QHeaderView::section {{
     font-size: {Type.CAPTION}px;
     font-weight: 600;
 }}
-QHeaderView::section:hover {{ color: {p.text_muted}; }}
+QHeaderView::section:hover {{ color: {p.text}; }}
+QHeaderView::up-arrow, QHeaderView::down-arrow {{
+    subcontrol-origin: content;
+    subcontrol-position: center right;
+    width: 8px;
+    height: 8px;
+}}
+
+/* ---- Details pane ------------------------------------------------------ */
+
+QWidget#Details {{
+    background: {p.surface};
+    border-left: 1px solid {p.border};
+}}
+QLabel#DetailName {{
+    font-size: {Type.SUBTITLE}px;
+    font-weight: 600;
+    color: {p.text};
+}}
+QLabel#DetailKey {{
+    font-size: {Type.CAPTION}px;
+    color: {p.text_subtle};
+}}
+QLabel#DetailValue {{
+    font-size: {Type.BODY}px;
+    color: {p.text_muted};
+}}
 
 /* ---- Scrollbars: thin overlay, not Qt's default slab -------------------- */
 

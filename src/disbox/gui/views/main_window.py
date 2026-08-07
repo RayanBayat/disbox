@@ -17,12 +17,11 @@ engine; the toolbar deliberately offers no button that would do nothing.
 import uuid
 from typing import Final
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -40,7 +39,7 @@ from PySide6.QtWidgets import (
 from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
-from disbox.gui.theme import Backdrop, Motion, Palette, Space, apply_backdrop, icons
+from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.backdrop import round_window_corners
 from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK, LIGHT
@@ -332,14 +331,6 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.setCentralWidget(root)
         self.install_frameless_chrome(self.title_bar)
 
-        # A short cross-fade on the content makes a directory change read as
-        # movement rather than a jump cut, without delaying anything.
-        self._fade_effect = QGraphicsOpacityEffect(self._stack)
-        self._stack.setGraphicsEffect(self._fade_effect)
-        self._fade = QPropertyAnimation(self._fade_effect, b"opacity", self)
-        self._fade.setDuration(Motion.FAST)
-        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
-
         for sequence, slot in (
             (QKeySequence.StandardKey.Back, self.navigate_back),
             (QKeySequence("Alt+Up"), self.navigate_up),
@@ -460,7 +451,6 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.table_model.set_directory(self._directory)
         self._set_crumbs(self._compute_crumbs())
 
-        self._play_fade()
         count = self.table_model.rowCount()
         self._empty_title.setText("Nothing here yet")
         self._empty_hint.setText("This folder is empty.")
@@ -472,15 +462,6 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     def _on_sort_changed(self, column: int, order: Qt.SortOrder) -> None:
         """Re-read the directory in the requested order."""
         self.table_model.set_sort(Column(column), ascending=order == Qt.SortOrder.AscendingOrder)
-
-    def _play_fade(self) -> None:
-        """Fade the content back in after its contents change."""
-        if not hasattr(self, "_fade"):
-            return  # first refresh runs before the animation is built
-        self._fade.stop()
-        self._fade.setStartValue(0.35)
-        self._fade.setEndValue(1.0)
-        self._fade.start()
 
     def _compute_crumbs(self) -> list[tuple[str, uuid.UUID | None]]:
         """Walk from the current directory to the root, building the trail."""
