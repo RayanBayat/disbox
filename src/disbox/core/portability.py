@@ -134,7 +134,12 @@ def export_vault(vault: Vault) -> dict[str, Any]:
 
 
 def write_export(vault: Vault, path: Path) -> None:
-    """Write an export of `vault` to `path` as indented UTF-8 JSON."""
+    """Write an export of `vault` to `path` as indented UTF-8 JSON.
+
+    Strict UTF-8 is safe here: SQLite already refuses to store a string that
+    cannot be encoded, so a name the vault holds is always a name the export
+    can write. See ``test_a_name_that_cannot_be_encoded_is_refused_by_storage``.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(export_vault(vault), indent=2, ensure_ascii=False, sort_keys=False),

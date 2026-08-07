@@ -52,6 +52,29 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: uv run pytest -q --cov --cov-report=term-missing
 
+  scale:
+    name: scale guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python and dependencies
+        run: uv sync --group dev --frozen
+
+      # Excluded from the main suite because building the fixture takes ~25 s.
+      # They catch the class of bug unit tests structurally cannot: two separate
+      # components here were accidentally quadratic and looked fine when small.
+      - name: Run scale guards
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest -m slow -q
+
   audit:
     name: dependency audit
     runs-on: ubuntu-latest

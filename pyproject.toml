@@ -120,12 +120,14 @@ disallow_untyped_defs = true
 
 # -------------------------------------------------------------- pytest ----
 [tool.pytest.ini_options]
-addopts = "-ra --strict-markers --strict-config --showlocals"
+# Slow scale tests are excluded by default; run them with `pytest -m slow`,
+# which overrides this because command-line options win over addopts.
+addopts = "-ra --strict-markers --strict-config --showlocals -m 'not slow'"
 testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = ["error"]
 markers = [
-    "slow: deselect with '-m \"not slow\"'",
+    "slow: large-scale performance guards; excluded by default",
     "live: hits a real external service; never runs in CI",
 ]
 
