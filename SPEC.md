@@ -486,99 +486,99 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 
 ### M0 — Bootstrap  *(~2 days)*
 
-- [ ] **M0-1** Verify the **Python 3.14 wheel matrix** for `PySide6`, `cryptography`, `blake3`, `argon2-cffi`, `httpx`, `pyinstaller`. Document results in `docs/compat.md`. **If PySide6 has no 3.14 wheel yet, pin to 3.13 and record the upgrade trigger** — do not block on it. *AC: a table of package → 3.14 wheel status, and a decision recorded.*
-- [ ] **M0-2** Benchmark stock CPython 3.14 vs the free-threaded build on a representative workload (encrypt + hash 1 GB across 8 threads). *AC: numbers in `docs/compat.md`; free-threading adopted only if it wins and all wheels support it.*
-- [ ] **M0-3** `uv init`; `pyproject.toml` with dependency groups (`core`, `gui`, `cli`, `dev`); commit `uv.lock`.
-- [ ] **M0-4** Tooling: `ruff` (lint + format), `mypy --strict`, `pytest` + `pytest-asyncio` + `hypothesis` + `pytest-qt`, `pre-commit`.
-- [ ] **M0-5** `git init` — **the current directory is not a git repository**. Add `.gitignore` covering `*.dbx`, `snapshots/`, `.env`, `dist/`.
-- [ ] **M0-6** GitHub Actions: lint → typecheck → test → `pip-audit`, on Windows and Linux runners.
-- [ ] **M0-7** `structlog` setup with a token/key redaction processor. *AC: a test asserts a bot token never appears in log output.*
+- [x] **M0-1** Verify the **Python 3.14 wheel matrix** for `PySide6`, `cryptography`, `blake3`, `argon2-cffi`, `httpx`, `pyinstaller`. Document results in `docs/compat.md`. **If PySide6 has no 3.14 wheel yet, pin to 3.13 and record the upgrade trigger** — do not block on it. *AC: a table of package → 3.14 wheel status, and a decision recorded.*
+- [x] **M0-2** Benchmark stock CPython 3.14 vs the free-threaded build on a representative workload (encrypt + hash 1 GB across 8 threads). *AC: numbers in `docs/compat.md`; free-threading adopted only if it wins and all wheels support it.*
+- [x] **M0-3** `uv init`; `pyproject.toml` with dependency groups (`core`, `gui`, `cli`, `dev`); commit `uv.lock`.
+- [x] **M0-4** Tooling: `ruff` (lint + format), `mypy --strict`, `pytest` + `pytest-asyncio` + `hypothesis` + `pytest-qt`, `pre-commit`.
+- [x] **M0-5** `git init` — **the current directory is not a git repository**. Add `.gitignore` covering `*.dbx`, `snapshots/`, `.env`, `dist/`.
+- [x] **M0-6** GitHub Actions: lint → typecheck → test → `pip-audit`, on Windows and Linux runners.
+- [x] **M0-7** `structlog` setup with a token/key redaction processor. *AC: a test asserts a bot token never appears in log output.*
 
 ### M1 — Vault  *(~5 days)*
 
-- [ ] **M1-1** Schema §3.3 as versioned migration `0001_initial.sql`; a lightweight migration runner keyed on `PRAGMA user_version`.
-- [ ] **M1-2** `Vault.open()/create()/close()` with all PRAGMAs from V1 and a single-writer lockfile (PID + hostname + stale detection). *AC: a second process opening the same vault fails with a clear error.*
-- [ ] **M1-3** Snapshot rotation (V3) using `sqlite3.Connection.backup()`. *AC: snapshots are created without blocking a concurrent read; retention policy honored.*
-- [ ] **M1-4** Journal writes (V4) on every mutation, behind a decorator so it cannot be forgotten.
-- [ ] **M1-5** Integrity checks (V5) + `Vault.restore_from_snapshot()`. *AC: a deliberately corrupted vault is detected on open and restorable.*
-- [ ] **M1-6** Export / import (V8) round-trip. *AC: property test — export → wipe → import produces a byte-identical logical tree.*
-- [ ] **M1-7** FTS5 trigram index with triggers keeping it in sync with `nodes`. *AC: substring search over 250 k synthetic nodes returns in < 50 ms.*
-- [ ] **M1-8** Seed/benchmark fixture generating a 250 k-node vault for perf tests.
+- [x] **M1-1** Schema §3.3 as versioned migration `0001_initial.sql`; a lightweight migration runner keyed on `PRAGMA user_version`.
+- [x] **M1-2** `Vault.open()/create()/close()` with all PRAGMAs from V1 and a single-writer lockfile (PID + hostname + stale detection). *AC: a second process opening the same vault fails with a clear error.*
+- [x] **M1-3** Snapshot rotation (V3) using `sqlite3.Connection.backup()`. *AC: snapshots are created without blocking a concurrent read; retention policy honored.*
+- [x] **M1-4** Journal writes (V4) on every mutation, behind a decorator so it cannot be forgotten.
+- [x] **M1-5** Integrity checks (V5) + `Vault.restore_from_snapshot()`. *AC: a deliberately corrupted vault is detected on open and restorable.*
+- [x] **M1-6** Export / import (V8) round-trip. *AC: property test — export → wipe → import produces a byte-identical logical tree.*
+- [x] **M1-7** FTS5 trigram index with triggers keeping it in sync with `nodes`. *AC: substring search over 250 k synthetic nodes returns in < 50 ms.*
+- [x] **M1-8** Seed/benchmark fixture generating a 250 k-node vault for perf tests.
 
 ### M2 — Crypto  *(~3 days)*
 
-- [ ] **M2-1** Argon2id KDF with tunable params; auto-calibrate `m`/`t` to ~1 s on the host at vault creation, store the chosen params.
-- [ ] **M2-2** Master-key wrap/unwrap, `mk_check` verifier, in-memory zeroization on lock/exit.
-- [ ] **M2-3** HKDF file-key and deterministic per-chunk nonce derivation. *AC: property test — no `(key, nonce)` pair ever repeats across 10⁶ generated chunks.*
-- [ ] **M2-4** AES-256-GCM seal/open over a `ThreadPoolExecutor`. *AC: throughput > 500 MB/s on 4 threads; benchmark recorded.*
-- [ ] **M2-5** Chunk header codec (§3.5) with CBOR, versioned, forward-compatible. *AC: a v1 reader rejects a v2 header with a clear error rather than misparsing.*
-- [ ] **M2-6** Optional OS-keyring KEK storage (Windows DPAPI via `keyring`), opt-in.
-- [ ] **M2-7** Known-answer tests against RFC/NIST vectors for AES-GCM and HKDF.
+- [x] **M2-1** Argon2id KDF with tunable params; auto-calibrate `m`/`t` to ~1 s on the host at vault creation, store the chosen params.
+- [x] **M2-2** Master-key wrap/unwrap, `mk_check` verifier, in-memory zeroization on lock/exit.
+- [x] **M2-3** HKDF file-key and deterministic per-chunk nonce derivation. *AC: property test — no `(key, nonce)` pair ever repeats across 10⁶ generated chunks.*
+- [x] **M2-4** AES-256-GCM seal/open over a `ThreadPoolExecutor`. *AC: throughput > 500 MB/s on 4 threads; benchmark recorded.*
+- [x] **M2-5** Chunk header codec (§3.5) with CBOR, versioned, forward-compatible. *AC: a v1 reader rejects a v2 header with a clear error rather than misparsing.*
+- [x] **M2-6** Optional OS-keyring KEK storage (Windows DPAPI via `keyring`), opt-in.
+- [x] **M2-7** Known-answer tests against RFC/NIST vectors for AES-GCM and HKDF.
 
 ### M3 — Chunking & manifest  *(~3 days)*
 
-- [ ] **M3-1** FastCDC implementation (or a vetted dependency) with configurable min/avg/max. *AC: > 400 MB/s single-threaded; boundary stability test — inserting 1 byte at offset 0 of a 1 GB file changes < 3 chunks.*
-- [ ] **M3-2** BLAKE3 chunk hashing over a thread pool.
-- [ ] **M3-3** Entropy probe → conditional zstd (`compression.zstd`). *AC: text compresses; a JPEG is skipped, verified by a test.*
-- [ ] **M3-4** Merkle root build + verify. *AC: property test — any single-bit flip in any chunk is detected.*
-- [ ] **M3-5** Dedup lookup path against `chunks`. *AC: uploading the same 1 GB file twice performs zero second-pass network writes.*
+- [x] **M3-1** FastCDC implementation (or a vetted dependency) with configurable min/avg/max. *AC: > 400 MB/s single-threaded; boundary stability test — inserting 1 byte at offset 0 of a 1 GB file changes < 3 chunks.*
+- [x] **M3-2** BLAKE3 chunk hashing over a thread pool.
+- [x] **M3-3** Entropy probe → conditional zstd (`compression.zstd`). *AC: text compresses; a JPEG is skipped, verified by a test.*
+- [x] **M3-4** Merkle root build + verify. *AC: property test — any single-bit flip in any chunk is detected.*
+- [x] **M3-5** Dedup lookup path against `chunks`. *AC: uploading the same 1 GB file twice performs zero second-pass network writes.*
 
 ### M4 — Backend abstraction  *(~2 days)*
 
-- [ ] **M4-1** `StorageBackend` Protocol: `put`, `get(range)`, `delete`, `bulk_delete`, `exists`, `iter_all`, `max_blob_size`, `probe()`.
-- [ ] **M4-2** `LocalBackend` writing blobs to a directory — the substrate for fast, network-free tests.
-- [ ] **M4-3** A shared **conformance test suite** every backend must pass. *AC: `LocalBackend` passes 100 %; `DiscordBackend` later runs the same suite.*
+- [x] **M4-1** `StorageBackend` Protocol: `put`, `get(range)`, `delete`, `bulk_delete`, `exists`, `iter_all`, `max_blob_size`, `probe()`.
+- [x] **M4-2** `LocalBackend` writing blobs to a directory — the substrate for fast, network-free tests.
+- [x] **M4-3** A shared **conformance test suite** every backend must pass. *AC: `LocalBackend` passes 100 %; `DiscordBackend` later runs the same suite.*
 
 ### M5 — Discord backend  *(~5 days)*
 
-- [ ] **M5-1** `httpx` client: HTTP/2, pooling, timeouts, `Bot` auth, graceful close.
-- [ ] **M5-2** Bucket-aware rate limiter keyed on `X-RateLimit-Bucket` + global ceiling. *AC: simulated 429 storms never exceed the limit and never recurse unboundedly.*
-- [ ] **M5-3** `put` with idempotency keys and `tenacity` retry. *AC: an injected mid-flight failure produces exactly one message, not two.*
-- [ ] **M5-4** `get` with ranged, streamed reads; lazy URL resolution with TTL cache.
-- [ ] **M5-5** Expired-URL handling via batch `attachments/refresh-urls`. *AC: a mocked expired URL triggers exactly one refresh and one retry.*
-- [ ] **M5-6** `delete` / `bulk_delete` with the <14-day constraint handled.
-- [ ] **M5-7** `probe()` — guild tier read + empirical binary-search size probe, cached to `backends.max_blob`.
-- [ ] **M5-8** `iter_all()` — paginated channel scan for rebuild.
-- [ ] **M5-9** Full `respx`-mocked test suite; the M4-3 conformance suite passes. *AC: no test touches the real Discord API.*
-- [ ] **M5-10** One manual, opt-in live smoke test (`--live`, off by default in CI).
+- [x] **M5-1** `httpx` client: HTTP/2, pooling, timeouts, `Bot` auth, graceful close.
+- [x] **M5-2** Bucket-aware rate limiter keyed on `X-RateLimit-Bucket` + global ceiling. *AC: simulated 429 storms never exceed the limit and never recurse unboundedly.*
+- [x] **M5-3** `put` with idempotency keys and `tenacity` retry. *AC: an injected mid-flight failure produces exactly one message, not two.*
+- [x] **M5-4** `get` with ranged, streamed reads; lazy URL resolution with TTL cache.
+- [x] **M5-5** Expired-URL handling via batch `attachments/refresh-urls`. *AC: a mocked expired URL triggers exactly one refresh and one retry.*
+- [x] **M5-6** `delete` / `bulk_delete` with the <14-day constraint handled.
+- [x] **M5-7** `probe()` — guild tier read + empirical binary-search size probe, cached to `backends.max_blob`.
+- [x] **M5-8** `iter_all()` — paginated channel scan for rebuild.
+- [x] **M5-9** Full `respx`-mocked test suite; the M4-3 conformance suite passes. *AC: no test touches the real Discord API.*
+- [x] **M5-10** One manual, opt-in live smoke test (`--live`, off by default in CI).
 
 ### M6 — Transfer engine  *(~5 days)*
 
-- [ ] **M6-1** `TransferEngine.upload()` — TaskGroup fan-out, semaphore, per-chunk checkpointing (T1–T3).
-- [ ] **M6-2** Resume: detect and continue an interrupted session. *AC: kill the process at 50 % of a 2 GB upload; restart re-sends only the missing chunks.*
-- [ ] **M6-3** `download()` — parallel fetch, ordered reassembly through a bounded buffer, Merkle verify (T6).
-- [ ] **M6-4** `read_range()` for previews and future mounting (T7).
-- [ ] **M6-5** Cancellation tokens across the whole stack (T5). *AC: cancel completes in < 500 ms and leaves a resumable session.*
-- [ ] **M6-6** Progress events at ≥ 4 Hz with rolling-window ETA (T9). *AC: no `NaN`, no negative, no > 100 % values — the old client produced all three (`ANALYSIS.md` §5.9).*
-- [ ] **M6-7** Memory ceiling test. *AC: uploading a 50 GB sparse file keeps RSS under the N3 bound.*
+- [x] **M6-1** `TransferEngine.upload()` — TaskGroup fan-out, semaphore, per-chunk checkpointing (T1–T3).
+- [x] **M6-2** Resume: detect and continue an interrupted session. *AC: kill the process at 50 % of a 2 GB upload; restart re-sends only the missing chunks.*
+- [x] **M6-3** `download()` — parallel fetch, ordered reassembly through a bounded buffer, Merkle verify (T6).
+- [x] **M6-4** `read_range()` for previews and future mounting (T7).
+- [x] **M6-5** Cancellation tokens across the whole stack (T5). *AC: cancel completes in < 500 ms and leaves a resumable session.*
+- [x] **M6-6** Progress events at ≥ 4 Hz with rolling-window ETA (T9). *AC: no `NaN`, no negative, no > 100 % values — the old client produced all three (`ANALYSIS.md` §5.9).*
+- [x] **M6-7** Memory ceiling test. *AC: uploading a 50 GB sparse file keeps RSS under the N3 bound.*
 
 ### M7 — Filesystem & maintenance  *(~5 days)*
 
-- [ ] **M7-1** `FileSystem`: create, rename, move, copy, recursive delete, path resolution, name-collision policy. *AC: renaming `/report/report.txt` behaves correctly — the §5.4 regression test.*
-- [ ] **M7-2** Trash: soft delete, restore-to-original-path, purge, retention sweep.
-- [ ] **M7-3** Revisions: create on re-upload, list, restore, prune.
-- [ ] **M7-4** Recursive folder upload / download with structure preservation.
-- [ ] **M7-5** GC worker implementing §3.6 exactly. *AC: crash-injection at every step leaves the vault consistent and the next pass completes cleanly.*
-- [ ] **M7-6** `verify` — existence check for all referenced chunks, plus `--deep` sampled re-hash.
-- [ ] **M7-7** `rebuild` from channel rescan (§3.5). *AC: delete the vault entirely; rebuild from bot token + channel + passphrase reproduces the full tree, verified against a pre-recorded manifest.*
-- [ ] **M7-8** Encrypted remote vault backup (V6) + restore-from-remote.
-- [ ] **M7-9** `doctor` — one-shot health report aggregating integrity, orphans, missing chunks, stale sessions.
+- [x] **M7-1** `FileSystem`: create, rename, move, copy, recursive delete, path resolution, name-collision policy. *AC: renaming `/report/report.txt` behaves correctly — the §5.4 regression test.*
+- [x] **M7-2** Trash: soft delete, restore-to-original-path, purge, retention sweep.
+- [x] **M7-3** Revisions: create on re-upload, list, restore, prune.
+- [x] **M7-4** Recursive folder upload / download with structure preservation.
+- [x] **M7-5** GC worker implementing §3.6 exactly. *AC: crash-injection at every step leaves the vault consistent and the next pass completes cleanly.*
+- [x] **M7-6** `verify` — existence check for all referenced chunks, plus `--deep` sampled re-hash.
+- [x] **M7-7** `rebuild` from channel rescan (§3.5). *AC: delete the vault entirely; rebuild from bot token + channel + passphrase reproduces the full tree, verified against a pre-recorded manifest.*
+- [x] **M7-8** Encrypted remote vault backup (V6) + restore-from-remote.
+- [x] **M7-9** `doctor` — one-shot health report aggregating integrity, orphans, missing chunks, stale sessions.
 
 ### M8 — GUI  *(~10 days)*
 
-- [ ] **M8-1** Qt ⇄ asyncio bridge: event loop on a `QThread`, queued signals, clean shutdown. *AC: no cross-thread Qt object access; verified under `pytest-qt`.*
-- [ ] **M8-2** `QAbstractTableModel` over paged SQLite (U1). *AC: 250 k rows scroll at 60 fps; memory flat.*
+- [x] **M8-1** Qt ⇄ asyncio bridge: event loop on a `QThread`, queued signals, clean shutdown. *AC: no cross-thread Qt object access; verified under `pytest-qt`.*
+- [x] **M8-2** `QAbstractTableModel` over paged SQLite (U1). *AC: 250 k rows scroll at 60 fps; memory flat.*
 - [ ] **M8-3** Folder tree with lazy expansion.
-- [ ] **M8-4** Main window shell: toolbar, breadcrumbs, splitters, status bar, persisted layout.
-- [ ] **M8-5** Transfer dock: per-item and aggregate progress, pause/resume/cancel/retry.
-- [ ] **M8-6** All §6.3 filesystem operations wired, with the collision-policy dialog.
+- [x] **M8-4** Main window shell: toolbar, breadcrumbs, splitters, status bar, persisted layout.
+- [x] **M8-5** Transfer dock: per-item and aggregate progress, pause/resume/cancel/retry.
+- [x] **M8-6** All §6.3 filesystem operations wired, with the collision-policy dialog.
 - [ ] **M8-7** Drag-and-drop in from Explorer, and out to Explorer with deferred rendering.
-- [ ] **M8-8** Search bar: debounced FTS5, `ext:`/`size>`/`before:` filters (U4).
+- [x] **M8-8** Search bar: debounced FTS5, `ext:`/`size>`/`before:` filters (U4).
 - [ ] **M8-9** Trash view, Properties dialog, Settings dialog.
 - [ ] **M8-10** Setup wizard + unlock screen + vault picker.
 - [ ] **M8-11** Undo stack over the journal.
 - [ ] **M8-12** Error/notification center with copyable diagnostic IDs; zero blocking modals for errors.
-- [ ] **M8-13** Theming (light/dark, follows OS) + QSS design tokens + icon set.
+- [x] **M8-13** Theming (light/dark, follows OS) + QSS design tokens + icon set.
 - [ ] **M8-14** Accessibility pass: keyboard reachability, accessible names, DPI/font scaling.
 - [ ] **M8-15** `pytest-qt` tests for every dialog and the main window flows.
 

@@ -341,6 +341,22 @@ def _opaque(colour: str) -> str:
 def _dock_rules(p: Palette, panel: str) -> str:
     """Rules for the transfer dock, kept together for legibility."""
     return f"""
+QTreeWidget#FolderTree {{
+    background: transparent;
+    border: none;
+    outline: none;
+}}
+QTreeWidget#FolderTree::item {{
+    padding: {Space.SM_XS}px {Space.XS}px;
+    border-radius: {Radius.SM}px;
+    color: {p.text_muted};
+}}
+QTreeWidget#FolderTree::item:hover {{ background: {p.surface_hover}; color: {p.text}; }}
+QTreeWidget#FolderTree::item:selected {{
+    background: {p.accent_subtle};
+    color: {p.text};
+}}
+
 QWidget#TransferDock {{
     background: {panel};
     border-top: 1px solid {p.border};

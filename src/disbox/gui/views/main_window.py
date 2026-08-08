@@ -63,6 +63,7 @@ from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
 from disbox.gui.views.details_pane import DetailsPane
+from disbox.gui.views.folder_tree import FolderTree
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
 from disbox.gui.views.transfer_dock import TransferDock
 
@@ -220,7 +221,15 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             self._nav_buttons[key] = button
             layout.addWidget(button)
 
-        layout.addStretch(1)
+        folders = QLabel("Folders")
+        folders.setObjectName("SectionLabel")
+        layout.addWidget(folders)
+
+        # The tree takes the stretch the sidebar used to waste on empty space.
+        self.tree = FolderTree(self._vault, self._palette)
+        self.tree.directory_selected.connect(self.navigate_to)
+        layout.addWidget(self.tree, 1)
+
         layout.addWidget(self._build_storage_meter())
         return sidebar
 
@@ -492,6 +501,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.row_delegate.set_palette(palette)
         self.details.set_palette(palette)
         self.dock.set_palette(palette)
+        self.tree.set_palette(palette)
         self._retint_icons()
         self._set_crumbs(self._crumbs)
         self.update()
@@ -753,6 +763,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             return None
 
         self._refresh()
+        self.tree.reload()
         self._select_node(node_id)
         return node_id
 
@@ -794,6 +805,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             self._report(str(exc))
 
         self._refresh()
+        self.tree.reload()
         # The selection is gone, so the details pane must stop describing it.
         self._table.clearSelection()
         self._on_selection_changed()
