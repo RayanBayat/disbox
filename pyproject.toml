@@ -31,8 +31,11 @@ dependencies = [
     "typer>=0.27.1",
 ]
 
+[project.scripts]
+disbox = "disbox.cli.main:main"
+
 [project.gui-scripts]
-disbox = "disbox.gui.app:main"
+disbox-gui = "disbox.gui.app:main"
 
 [project.urls]
 Repository = "https://github.com/rayanbayat/disbox"
