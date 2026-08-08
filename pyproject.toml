@@ -54,6 +54,7 @@ dev = [
     "pytest-qt>=4.5.0",
     "pytest-asyncio>=1.4.0",
     "respx>=0.23.1",
+    "pyinstaller>=6.21.0",
 ]
 
 [build-system] # PEP 517/518

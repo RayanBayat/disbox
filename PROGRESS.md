@@ -127,6 +127,8 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-10 | Vault picker, create, unlock | ✅ Recent list under platformdirs |
 | M8-15 | pytest-qt coverage for dialogs | ✅ 548 tests; lock test mutation-checked |
 | M9-3 | README, .env.example | ✅ GUI engine wiring fixed while writing them |
+| M9-1 | PyInstaller bundle | ✅ Builds on 3.14, launches, 149 MB |
+| M9-2 | Inno Setup installer | 🟡 Written, never compiled — Inno Setup unavailable |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
