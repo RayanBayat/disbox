@@ -24,6 +24,7 @@ at something that was never uploaded.
 """
 
 import asyncio
+import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -141,19 +142,28 @@ class TransferEngine:
         source: BinaryIO,
         *,
         on_progress: ProgressCallback | None = None,
+        cancel: asyncio.Event | None = None,
     ) -> int:
         """Store `source` as the node's current contents.
+
+        Chunks already stored by an earlier attempt are reused. Content-defined
+        chunking is what makes that reliable: the same input yields the same
+        boundaries, so a resumed upload recomputes the same hashes and finds
+        them already present instead of re-sending identical bytes.
 
         Args:
             node_id: Node to attach the new revision to.
             source: Readable binary stream. Consumed incrementally.
             on_progress: Called as chunks complete.
+            cancel: Set to stop the transfer. Work already done is kept and the
+                session left resumable, so cancelling is never destructive.
 
         Returns:
             The id of the revision created.
 
         Raises:
-            TransferError: If a chunk could not be stored.
+            TransferError: If a chunk could not be stored, or the transfer was
+                cancelled.
         """
         # Read once here, on the calling thread: sealing runs in a worker and
         # SQLite connections are bound to the thread that created them.
@@ -167,6 +177,7 @@ class TransferEngine:
         done = 0
         stored: dict[int, _StoredChunk] = {}
         self._in_flight = {}
+        session_id = self._open_session(node_id, len(chunks))
 
         def report() -> None:
             if on_progress is not None:
@@ -181,8 +192,15 @@ class TransferEngine:
 
         async def handle(chunk: Chunk) -> None:
             nonlocal done
+            if cancel is not None and cancel.is_set():
+                msg = "transfer cancelled"
+                raise TransferError(msg)
             async with self._semaphore:
-                stored[chunk.index] = await self._store_chunk(node_id, chunk, name)
+                result = await self._store_chunk(node_id, chunk, name)
+            stored[chunk.index] = result
+            # Checkpointed per chunk rather than per batch: a crash must never
+            # cost more than the single chunk still in flight.
+            self._checkpoint(session_id, chunk.index, result)
             done += 1
             report()
 
@@ -192,11 +210,17 @@ class TransferEngine:
                     group.create_task(handle(chunk))
         except* Exception as failures:
             first = failures.exceptions[0]
+            # Leave the session resumable. Everything already stored stays
+            # recorded, so the retry sends only what is missing.
+            self._pause_session(session_id)
+            if isinstance(first, TransferError) and "cancelled" in str(first):
+                raise first from None
             msg = f"upload of node {node_id} failed: {first}"
             raise TransferError(msg) from first
 
         if not chunks:
             report()
+        self._close_session(session_id)
 
         revision_id = self._commit(node_id, [stored[i] for i in sorted(stored)], total_bytes)
         logger.info(
@@ -324,6 +348,63 @@ class TransferEngine:
             )
         return revision_id
 
+    # ------------------------------------------------------------ sessions --
+
+    def _open_session(self, node_id: uuid.UUID, total_chunks: int) -> bytes:
+        """Start or adopt the upload session for a node.
+
+        Adopting an existing session is what turns a retry into a resume: its
+        record of completed chunks outlives the failure that interrupted it.
+        """
+        existing = self._vault.connection.execute(
+            "SELECT id FROM upload_sessions WHERE node_id = ? AND state <> 'done'",
+            (node_id.bytes,),
+        ).fetchone()
+        now = datetime.now(UTC).isoformat()
+
+        if existing is not None:
+            with self._vault.connection as conn:
+                conn.execute(
+                    "UPDATE upload_sessions SET state = 'active', updated_at = ? WHERE id = ?",
+                    (now, existing[0]),
+                )
+            return bytes(existing[0])
+
+        session_id = uuid.uuid7().bytes
+        with self._vault.connection as conn:
+            conn.execute(
+                "INSERT INTO upload_sessions (id, node_id, source_path, total_size, state, "
+                "completed, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
+                (session_id, node_id.bytes, "", total_chunks, "{}", now, now),
+            )
+        return session_id
+
+    def _checkpoint(self, session_id: bytes, index: int, stored: _StoredChunk) -> None:
+        """Record one completed chunk against the session."""
+        with self._vault.connection as conn:
+            row = conn.execute(
+                "SELECT completed FROM upload_sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            completed = json.loads(row[0]) if row and row[0] else {}
+            completed[str(index)] = stored.plaintext_hash.hex()
+            conn.execute(
+                "UPDATE upload_sessions SET completed = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(completed), datetime.now(UTC).isoformat(), session_id),
+            )
+
+    def _pause_session(self, session_id: bytes) -> None:
+        """Mark a session resumable after a failure or cancellation."""
+        with self._vault.connection as conn:
+            conn.execute(
+                "UPDATE upload_sessions SET state = 'paused', updated_at = ? WHERE id = ?",
+                (datetime.now(UTC).isoformat(), session_id),
+            )
+
+    def _close_session(self, session_id: bytes) -> None:
+        """Retire a session once its upload has committed."""
+        with self._vault.connection as conn:
+            conn.execute("DELETE FROM upload_sessions WHERE id = ?", (session_id,))
+
     def _backend_row(self) -> int:
         """Return this backend's row id, registering it on first use."""
         row = self._vault.connection.execute(
@@ -355,6 +436,7 @@ class TransferEngine:
         sink: BinaryIO,
         *,
         on_progress: ProgressCallback | None = None,
+        cancel: asyncio.Event | None = None,
     ) -> None:
         """Reassemble a node's contents into `sink`.
 
@@ -366,6 +448,9 @@ class TransferEngine:
             node_id: Node to read.
             sink: Writable binary stream.
             on_progress: Called as chunks are written.
+            cancel: Set to stop the transfer. Nothing partial is written to
+                `sink`, because chunks are only written after every fetch has
+                completed.
 
         Raises:
             TransferError: If the node has no contents, or a chunk is missing,
@@ -380,6 +465,9 @@ class TransferEngine:
         results: dict[int, bytes] = {}
 
         async def fetch(index: int, digest: bytes, ref: BlobRef) -> None:
+            if cancel is not None and cancel.is_set():
+                msg = "transfer cancelled"
+                raise TransferError(msg)
             async with self._semaphore:
                 blob = await self._backend.get(ref)
             results[index] = await asyncio.to_thread(self._unseal, index, digest, blob)
@@ -392,6 +480,8 @@ class TransferEngine:
                     group.create_task(fetch(index, digest, ref))
         except* Exception as failures:
             first = failures.exceptions[0]
+            if isinstance(first, TransferError) and "cancelled" in str(first):
+                raise first from None
             msg = f"download of node {node_id} failed: {first}"
             raise TransferError(msg) from first
 
