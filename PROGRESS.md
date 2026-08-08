@@ -131,6 +131,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M9-2 | Inno Setup installer | 🟡 Written, never compiled — Inno Setup unavailable |
 | M9-5 | Release workflow | ✅ Tag-triggered, verifies then builds, draft release |
 | M9-4 | First-run experience | ✅ Welcome state, storage disclosure, backup notice |
+| M10-1 | Chaos tests | ✅ 9 tests; found an untested integrity guard |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
@@ -259,6 +260,17 @@ uv run ruff format .         # format
 ---
 
 ## Notes and gotchas
+
+### The chunk hash check is defence against our own bugs, not attackers
+
+`TransferEngine._unseal` compares the recovered bytes against the recorded
+digest, but the chunk key is *derived from that digest*, so any blob that
+decrypts at all was sealed under it. Tampered storage fails AES-GCM
+authentication first and never reaches the comparison.
+
+The whole suite passed with that check disabled until a test was written that
+simulates the internal failure it actually guards -- decompression returning
+the wrong bytes. Keep it, but do not mistake it for corruption detection.
 
 ### Run `uv run mypy`, not `uv run mypy src`
 

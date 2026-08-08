@@ -592,7 +592,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 
 ### M10 — Hardening  *(~3 days)*
 
-- [ ] **M10-1** Chaos suite: kill the process at 20 randomized points during upload, download, delete, and GC; assert vault consistency every time.
+- [x] **M10-1** Chaos suite: kill the process at 20 randomized points during upload, download, delete, and GC; assert vault consistency every time.
 - [ ] **M10-2** Long-run soak: 100 GB across 50 k files, measure throughput, memory, and vault growth.
 - [ ] **M10-3** Regression tests for **every** defect in `ANALYSIS.md` §5, each named after its section number.
 - [ ] **M10-4** Security review: token handling, key zeroization, log redaction, lockfile races, header forgery resistance.
