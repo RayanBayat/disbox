@@ -26,9 +26,10 @@ from pathlib import Path
 from typing import Final
 
 from PySide6.QtCore import QMimeData, QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
+from PySide6.QtGui import QAction, QDrag, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -55,6 +56,7 @@ from disbox.core.undo import describe_next_undo, undo_last
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge, AsyncTask, Work
+from disbox.gui.drag import DeferredFileMimeData
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.notifications import NotificationLog
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
@@ -356,6 +358,11 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         table.setAccessibleName("Files in this folder")
+        # Dragging out is handled by the window, so the view only has to start
+        # the gesture rather than know what a vault node is.
+        table.setDragEnabled(True)
+        table.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        table.startDrag = self._start_drag  # type: ignore[method-assign]
         table.setShowGrid(False)
         table.setAlternatingRowColors(False)
         table.setFrameShape(QFrame.Shape.NoFrame)
@@ -780,6 +787,69 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             return name
 
         self._run_transfer(work, f"Uploading {source.name}")
+
+    def _start_drag(self, _supported: Qt.DropAction) -> None:
+        """Begin dragging the selection out to the file manager."""
+        mime = self.build_drag_mime()
+        if mime is None:
+            return
+        drag = QDrag(self._table)
+        drag.setMimeData(mime)
+        drag.exec(self.drag_actions())
+
+    def drag_actions(self) -> Qt.DropAction:
+        """What a drag out of the file list may do.
+
+        Copy only. A move would delete from the vault when the drop succeeded,
+        and a drag to the file manager must never remove the original.
+        """
+        return Qt.DropAction.CopyAction
+
+    def build_drag_mime(self) -> DeferredFileMimeData | None:
+        """Mime data for the current selection, or None if nothing is selected.
+
+        The files are not fetched here. They are written when the drop target
+        asks for them, so picking up a large folder and thinking better of it
+        costs nothing.
+        """
+        nodes = self.selected_nodes
+        if not nodes or self._engine is None or self._bridge is None:
+            return None
+        return DeferredFileMimeData(nodes, self._materialise_for_drag)
+
+    def _materialise_for_drag(self, nodes: list[uuid.UUID], destination: Path) -> list[Path]:
+        """Download `nodes` into `destination`, blocking until they are there.
+
+        Blocking is unavoidable: the drop target is waiting for bytes and has no
+        way to be told "later". It happens at drop rather than at drag start,
+        which is the part that matters.
+        """
+        engine, bridge = self._engine, self._bridge
+        if engine is None or bridge is None:  # pragma: no cover - guarded above
+            return []
+
+        filesystem = FileSystem(self._vault)
+        written: list[Path] = []
+
+        async def work(_: AsyncTask) -> None:
+            walker = TreeTransfer(filesystem, engine)
+            for node_id in nodes:
+                node = filesystem.resolve(node_id)
+                if node.kind == "dir":
+                    await walker.download_folder(node_id, destination)
+                    written.append(destination / node.name)
+                    continue
+                target = destination / node.name
+                with target.open("wb") as handle:
+                    await engine.download(node_id, handle)
+                written.append(target)
+
+        task = bridge.submit(work)
+        # Drive the Qt loop while waiting, or the application freezes solid
+        # rather than merely being busy.
+        while task._future is None or not task._future.done():
+            QApplication.processEvents()
+        return written
 
     def _folder_upload(self, source: Path, directory: uuid.UUID | None) -> Work:
         """Work that uploads `source` and everything beneath it."""

@@ -120,7 +120,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-5 | Transfer dock: label, progress, cancel | ✅ Per-item; aggregate queue progress not shown |
 | M8-3 | Folder tree pane, lazy expansion | ✅ |
 | M8-9 | Trash view, properties, settings | ✅ Permanent purge deliberately not wired |
-| M8-7 | Folder transfers, drop from Explorer | 🟡 Drag *out* to Explorer not done |
+| M8-7 | Folder transfers, drop in and drag out | ✅ Deferred to drop, not true COM streaming |
 | M8-11 | Undo over the journal | ✅ create/rename/delete/restore/move |
 | M8-12 | Notification centre, diagnostic IDs | ✅ No blocking modal for any error |
 | M8-14 | Accessibility: names, keyboard, scaling | ✅ Verified composited at 150% |
@@ -204,6 +204,9 @@ lose cross-file dedup.
 
 ## Known limitations
 
+- **Drag out materialises whole files at drop time**, rather than streaming
+  them through `CFSTR_FILECONTENTS`. Explorer will appear to pause on a very
+  large drop. Proper deferred rendering means implementing `IDataObject`.
 - **Upload runs at ~5 MiB/s and is chunk-bound.** 99% of it is `_cut_point`,
   the per-byte rolling hash in pure Python. Download is 60-90x faster. Fixing it
   changes chunk boundaries, so it is a migration decision as well as a

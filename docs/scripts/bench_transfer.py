@@ -82,9 +82,7 @@ async def bench_round_trip(root: Path, data: bytes) -> tuple[float, float]:
 
 async def main() -> None:
     """Run every size and print a table."""
-    sys.stdout.write(
-        f"{'Size':>8} | {'Chunk':>12} | {'Upload':>12} | {'Download':>12}\n"
-    )
+    sys.stdout.write(f"{'Size':>8} | {'Chunk':>12} | {'Upload':>12} | {'Download':>12}\n")
     sys.stdout.write(f"{'-' * 8}-+-{'-' * 12}-+-{'-' * 12}-+-{'-' * 12}\n")
 
     for megabytes in SIZES:
