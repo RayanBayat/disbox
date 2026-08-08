@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M5/M6 core done → M7 filesystem · running under /loop
+**Branch:** `main` · **Current milestone:** M7 — Filesystem (2 / 9) · running under /loop
 
 ---
 
@@ -19,11 +19,11 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
 | **M5** | Discord backend | 🟡 Core done | 8 / 10 |
 | **M6** | Transfer engine | 🟡 Core done | 4 / 7 |
-| M7 | Filesystem & maintenance | ⚪ Not started | 0 / 9 |
+| **M7** | Filesystem & maintenance | 🟡 In progress | 2 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **47 / 81** |
+| | **Total** | | **49 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 325 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 357 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
