@@ -575,7 +575,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 - [ ] **M8-7** Drag-and-drop in from Explorer, and out to Explorer with deferred rendering.
 - [x] **M8-8** Search bar: debounced FTS5, `ext:`/`size>`/`before:` filters (U4).
 - [x] **M8-9** Trash view, Properties dialog, Settings dialog.
-- [ ] **M8-10** Setup wizard + unlock screen + vault picker.
+- [x] **M8-10** Setup wizard + unlock screen + vault picker.
 - [x] **M8-11** Undo stack over the journal.
 - [x] **M8-12** Error/notification center with copyable diagnostic IDs; zero blocking modals for errors.
 - [x] **M8-13** Theming (light/dark, follows OS) + QSS design tokens + icon set.

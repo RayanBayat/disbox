@@ -3,12 +3,17 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from platformdirs import user_data_path
+from PySide6.QtWidgets import QApplication, QMessageBox
 
+from disbox.core.startup import RecentVaults
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge
+from disbox.gui.theme.backdrop import system_prefers_dark
+from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.main_window import MainWindow
+from disbox.gui.views.startup_dialog import StartupDialog
 from disbox.log import configure, get_logger
 
 __all__ = ["main"]
@@ -16,16 +21,9 @@ __all__ = ["main"]
 logger = get_logger(__name__)
 
 
-def choose_vault() -> Path | None:
-    """Ask the user which vault to open.
-
-    Returns:
-        The chosen path, or None if the dialog was dismissed.
-    """
-    selected, _ = QFileDialog.getOpenFileName(
-        None, "Open a Disbox vault", str(Path.home()), "Disbox vaults (*.dbx)"
-    )
-    return Path(selected) if selected else None
+def recent_vaults() -> RecentVaults:
+    """The list of vaults this installation has opened."""
+    return RecentVaults(user_data_path("disbox", appauthor=False) / "recent.json")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,23 +44,32 @@ def main(argv: list[str] | None = None) -> int:
     # Fusion draws nothing on its own, so the stylesheet is the only authority.
     app.setStyle("Fusion")
 
-    path = Path(args[0]) if args else choose_vault()
-    if path is None:
-        return 0
+    palette = DARK if system_prefers_dark() else LIGHT
+    recents = recent_vaults()
 
-    try:
-        vault = Vault.open(path)
-    except DisboxError as exc:
-        # A vault that is damaged or already open is an expected outcome, not a
-        # crash; the message from core already explains what to do about it.
-        QMessageBox.critical(None, "Cannot open vault", str(exc))
-        logger.warning("vault could not be opened", path=str(path), reason=str(exc))
-        return 1
+    if args:
+        # A path on the command line skips the picker, but an encrypted vault
+        # still needs its passphrase, which only the dialog can ask for.
+        path = Path(args[0])
+        try:
+            vault = Vault.open(path)
+        except DisboxError as exc:
+            # A vault that is damaged or already open is an expected outcome,
+            # not a crash; the message from core already says what to do.
+            QMessageBox.critical(None, "Cannot open vault", str(exc))
+            logger.warning("vault could not be opened", path=str(path), reason=str(exc))
+            return 1
+        recents.remember(path)
+    else:
+        dialog = StartupDialog(recents, palette)
+        if not dialog.exec() or dialog.vault is None:
+            return 0
+        vault = dialog.vault
 
     bridge = AsyncBridge()
     bridge.start()
     try:
-        window = MainWindow(vault, bridge=bridge)
+        window = MainWindow(vault, palette, bridge=bridge)
         window.show()
         return app.exec()
     finally:
