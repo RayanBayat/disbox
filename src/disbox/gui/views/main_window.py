@@ -15,6 +15,7 @@ engine; the toolbar deliberately offers no button that would do nothing.
 """
 
 import uuid
+from collections.abc import Callable
 from typing import Final
 
 from PySide6.QtCore import QSize, Qt
@@ -40,7 +41,7 @@ from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
-from disbox.gui.theme.backdrop import round_window_corners
+from disbox.gui.theme.backdrop import round_window_corners, set_dark_titlebar
 from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
@@ -70,6 +71,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._search_results: list[str] = []
         self._searching = False
         self._crumbs: list[tuple[str, uuid.UUID | None]] = []
+        # Observation point for tests: the compositor call itself cannot be
+        # asserted on, since it writes to a window handle and returns nothing
+        # visible from Python.
+        self._material_hook: Callable[[bool], None] | None = None
 
         self.setWindowTitle(f"Disbox — {vault.path.stem}")
         self.resize(1180, 720)
@@ -84,8 +89,19 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     # -------------------------------------------------------------- chrome --
 
     def _apply_window_material(self) -> None:
-        """Request a compositor backdrop, and stay opaque if there is none."""
+        """Request a compositor backdrop matching the current palette.
+
+        DWMWA_USE_IMMERSIVE_DARK_MODE is not only about the caption: it decides
+        which way the compositor tints Mica. Without it the material follows the
+        *system* theme, so a light palette over a dark Windows leaves light
+        translucent surfaces sitting on dark Mica -- which reads as muddy grey
+        rather than light. It must therefore be reapplied on every theme
+        change, not set once at construction.
+        """
         handle = int(self.winId())
+        set_dark_titlebar(handle, dark=self._palette.is_dark)
+        if self._material_hook is not None:
+            self._material_hook(self._palette.is_dark)
         # A frameless window loses the compositor's corner rounding; ask for it
         # back, or the app sits on the desktop with hard right angles that no
         # other Windows 11 window has.
@@ -358,6 +374,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         """
         self._palette = palette
         self.setStyleSheet(build_stylesheet(palette))
+        self._apply_window_material()
         self.table_model.set_palette(palette)
         self.row_delegate.set_palette(palette)
         self.details.set_palette(palette)
@@ -376,6 +393,11 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.title_bar.retint(self._palette)
 
     # ---------------------------------------------------------- navigation --
+
+    @property
+    def palette_name(self) -> str:
+        """Name of the palette currently applied."""
+        return self._palette.name
 
     @property
     def current_directory(self) -> uuid.UUID | None:

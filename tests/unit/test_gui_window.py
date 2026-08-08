@@ -220,3 +220,47 @@ class TestDetailsPane:
             conn.execute("DELETE FROM nodes WHERE id = ?", (node_id.bytes,))
         win.details.show_node(node_id)
         assert not win.details.isVisible()
+
+
+class TestThemeSwitching:
+    """Switching themes must update every surface that holds a palette.
+
+    The palette lives in four places -- the stylesheet, the table model, the row
+    delegate, and the details pane -- plus the compositor's own material.
+    Missing any one of them looks like a broken theme rather than a bug in a
+    component, which is exactly how it was first reported.
+    """
+
+    def test_toggling_switches_the_palette(self, window: MainWindow) -> None:
+        before = window.palette_name
+        window.toggle_theme()
+        assert window.palette_name != before
+
+    def test_toggling_twice_returns_to_the_start(self, window: MainWindow) -> None:
+        before = window.palette_name
+        window.toggle_theme()
+        window.toggle_theme()
+        assert window.palette_name == before
+
+    def test_the_model_is_retinted(self, vault: Vault, qtbot: QtBot) -> None:
+        add(vault, "photo.jpg")
+        win = MainWindow(vault)
+        qtbot.addWidget(win)
+
+        index = win.table_model.index(0, Column.NAME)
+        before = win.table_model.data(index, Qt.ItemDataRole.ForegroundRole)
+        win.toggle_theme()
+        after = win.table_model.data(index, Qt.ItemDataRole.ForegroundRole)
+        assert before.color() != after.color(), "cell colour did not follow the theme"
+
+    def test_the_window_material_follows_the_theme(self, window: MainWindow) -> None:
+        """Mica tints to the system theme unless told otherwise on every change.
+
+        Left unset, a light palette over a dark Windows leaves light surfaces
+        on dark Mica, which reads as muddy grey rather than light.
+        """
+        calls: list[bool] = []
+        window._material_hook = calls.append
+        window.toggle_theme()
+        window.toggle_theme()
+        assert calls == [False, True], calls
