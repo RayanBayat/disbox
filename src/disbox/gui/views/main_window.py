@@ -51,6 +51,7 @@ from disbox.core.engine import TransferEngine
 from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
 from disbox.core.tree_transfer import TreeTransfer
+from disbox.core.undo import describe_next_undo, undo_last
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge, AsyncTask, Work
@@ -451,6 +452,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             (QKeySequence("Ctrl+Shift+N"), self.prompt_new_folder),
             (QKeySequence("F2"), self.prompt_rename),
             (QKeySequence("Alt+Return"), self.show_properties),
+            (QKeySequence.StandardKey.Undo, self.undo_last_change),
             (QKeySequence.StandardKey.Delete, self.delete_selected),
         ):
             action = QAction(self)
@@ -517,7 +519,23 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             QKeySequence("Ctrl+Shift+N")
         )
 
+        pending = describe_next_undo(self._vault)
+        if pending is not None:
+            menu.addSeparator()
+            menu.addAction(f"Undo {pending}", self.undo_last_change).setShortcut(
+                QKeySequence.StandardKey.Undo
+            )
+
         menu.exec(self._table.viewport().mapToGlobal(position))
+
+    def undo_last_change(self) -> None:
+        """Reverse the last reversible mutation, reporting the outcome."""
+        message = undo_last(self._vault)
+        if message is None:
+            self._report("Nothing to undo")
+            return
+        self._report(message)
+        self._on_vault_changed()
 
     def show_properties(self) -> None:
         """Describe the single selected node in full."""

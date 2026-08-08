@@ -212,7 +212,15 @@ class FileSystem:
                     node_id.bytes,
                 ),
             )
-            record(conn, "move", target_id=node_id, payload={"to": str(new_parent)})
+            # The origin is recorded so the move can be reversed. Without it
+            # the journal says where a node went but not where it came from,
+            # which is not enough to put it back.
+            record(
+                conn,
+                "move",
+                target_id=node_id,
+                payload={"from": str(node.parent_id), "to": str(new_parent)},
+            )
 
     def delete(self, node_id: uuid.UUID) -> int:
         """Move a node, and everything beneath it, to the trash.
