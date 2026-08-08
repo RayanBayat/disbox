@@ -132,6 +132,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M9-5 | Release workflow | ✅ Tag-triggered, verifies then builds, draft release |
 | M9-4 | First-run experience | ✅ Welcome state, storage disclosure, backup notice |
 | M10-1 | Chaos tests | ✅ 9 tests; found an untested integrity guard |
+| M10-2 | Soak test | ✅ 6 tests, ~63 s, marked slow; leak detector mutation-checked |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
