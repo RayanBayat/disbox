@@ -64,6 +64,7 @@ from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
 from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
+from disbox.gui.views.transfer_dock import TransferDock
 
 __all__ = ["MainWindow"]
 
@@ -108,6 +109,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._engine = engine
         self._queue: list[Path] = []
         self._transferring = False
+        self._current_task: AsyncTask | None = None
         self._palette = palette
         self._directory: uuid.UUID | None = None
         self._history: list[uuid.UUID | None] = []
@@ -402,6 +404,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._stack.setContentsMargins(Space.SM, Space.SM, Space.SM, 0)
         content_layout.addWidget(self._stack, 1)
 
+        self.dock = TransferDock(self._palette)
+        self.dock.cancel_requested.connect(self.cancel_transfers)
+        content_layout.addWidget(self.dock)
+
         self._status = QLabel()
         self._status.setObjectName("StatusText")
         self._status.setContentsMargins(Space.LG, Space.SM, Space.LG, Space.SM)
@@ -485,6 +491,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self.table_model.set_palette(palette)
         self.row_delegate.set_palette(palette)
         self.details.set_palette(palette)
+        self.dock.set_palette(palette)
         self._retint_icons()
         self._set_crumbs(self._crumbs)
         self.update()
@@ -618,6 +625,8 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             return
         if not self._queue:
             self._transferring = False
+            self._current_task = None
+            self.dock.end()
             self._refresh()
             self.transfers_idle.emit()
             return
@@ -679,11 +688,25 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             return
 
         self._report(label)
+        self.dock.begin(label)
         task = self._bridge.submit(work)
+        self._current_task = task
         task.progress.connect(self.transfer_progress.emit)
+        task.progress.connect(self.dock.report)
         task.finished.connect(lambda _: self._on_transfer_done())
         task.failed.connect(self._on_transfer_failed)
         task.cancelled.connect(self._on_transfer_done)
+
+    def cancel_transfers(self) -> None:
+        """Cancel the running transfer and abandon whatever is queued.
+
+        Clearing the queue is the point: cancelling only the current file would
+        immediately start the next one, which is not what the button appears to
+        promise.
+        """
+        self._queue.clear()
+        if self._current_task is not None:
+            self._current_task.cancel()
 
     def _on_transfer_done(self) -> None:
         """One transfer ended; continue with whatever is queued."""

@@ -37,7 +37,9 @@ def build_stylesheet(p: Palette, *, translucent: bool = True) -> str:
     panel = p.panel if translucent else _opaque(p.panel)
     # Scrollbars deserve special mention: Qt's defaults are chunky and dated,
     # and a thin overlay bar is one of the clearest signals of a modern app.
-    return f"""
+    return (
+        _dock_rules(p, panel)
+        + f"""
 * {{
     font-family: {Type.FAMILY};
     font-size: {Type.BODY}px;
@@ -320,6 +322,7 @@ QToolTip {{
     color: {p.text};
 }}
 """
+    )
 
 
 def _opaque(colour: str) -> str:
@@ -333,3 +336,40 @@ def _opaque(colour: str) -> str:
     parts = [part.strip() for part in colour.removeprefix("rgba(").rstrip(")").split(",")]
     red, green, blue = parts[0], parts[1], parts[2]
     return f"rgb({red}, {green}, {blue})"
+
+
+def _dock_rules(p: Palette, panel: str) -> str:
+    """Rules for the transfer dock, kept together for legibility."""
+    return f"""
+QWidget#TransferDock {{
+    background: {panel};
+    border-top: 1px solid {p.border};
+}}
+QLabel#TransferLabel {{
+    font-size: {Type.BODY}px;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
+    color: {p.text};
+}}
+QLabel#TransferDetail {{
+    font-size: {Type.CAPTION}px;
+    color: {p.text_muted};
+}}
+QProgressBar#TransferBar {{
+    background: {p.surface_hover};
+    border: none;
+    border-radius: 3px;
+}}
+QProgressBar#TransferBar::chunk {{
+    background: {p.accent};
+    border-radius: 3px;
+}}
+QToolButton#TransferCancel {{
+    background: transparent;
+    border: none;
+    border-radius: {Radius.SM}px;
+    padding: {Space.XS}px;
+}}
+QToolButton#TransferCancel:hover {{ background: {p.surface_hover}; }}
+QToolButton#TransferCancel:pressed {{ background: {p.surface_active}; }}
+QToolButton#TransferCancel:focus {{ background: transparent; }}
+"""
