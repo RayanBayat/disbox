@@ -124,6 +124,17 @@ docstring-code-format = true
 # ---------------------------------------------------------------- mypy ----
 [tool.mypy]
 python_version = "3.14"
+# Always type-check as Windows, whatever the checker is running on. The desktop
+# client is Windows-first -- Mica, DWM window attributes, frameless chrome -- and
+# reaches those through ctypes.windll, which typeshed only defines on win32.
+# Without this, the same code passes on a Windows developer machine and fails on
+# a Linux CI runner with ten errors that say nothing about correctness: missing
+# attributes on the branch that never runs there, plus every Windows branch
+# reported as unreachable because sys.platform narrowed it away.
+#
+# The non-Windows paths this stops checking are the fallbacks, which return a
+# constant. Losing coverage of those is worth local and CI agreeing.
+platform = "win32"
 strict = true
 warn_unreachable = true
 warn_unused_ignores = true
