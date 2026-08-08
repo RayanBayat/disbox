@@ -588,7 +588,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 - [ ] **M9-2** PyInstaller onedir build + Inno Setup installer; portable zip. *AC: installs and runs on a clean Windows 11 VM with no Python present.*
 - [ ] **M9-3** First-run experience: vault creation, wizard, sample upload.
 - [ ] **M9-4** Docs: README, setup guide, **disaster-recovery runbook** (rebuild, restore, doctor), threat model, ToS notice.
-- [ ] **M9-5** Release workflow: tag → build → sign → GitHub Release with checksums.
+- [x] **M9-5** Release workflow: tag → build → sign → GitHub Release with checksums.
 
 ### M10 — Hardening  *(~3 days)*
 

@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Buildable on demand so the packaging path can be exercised without
+  # spending a version number to discover it is broken.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_PYTHON_DOWNLOADS: only-managed
+
+jobs:
+  verify:
+    name: verify before building
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python and dependencies
+        run: uv sync --group dev --frozen
+
+      # The same gates as CI. A tag can be pushed to a commit CI never ran on,
+      # so the release path cannot assume it was already checked.
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest -q
+
+  build:
+    name: build windows bundle
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python and dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Build the executable
+        run: uv run pyinstaller packaging/disbox.spec --noconfirm --distpath build/dist --workpath build/work
+
+      # Proves the bundle starts rather than only that it compiled. A missing Qt
+      # plugin is a runtime failure, so a build that merely succeeded says little.
+      - name: Smoke-test the bundle
+        shell: pwsh
+        run: |
+          $exe = "build/dist/Disbox/Disbox.exe"
+          if (-not (Test-Path $exe)) { throw "the build produced no executable" }
+          $proc = Start-Process $exe -ArgumentList "C:/nonexistent.dbx" -PassThru
+          Start-Sleep -Seconds 20
+          if ($proc.HasExited -and $proc.ExitCode -ne 1) {
+            throw "the bundle exited with $($proc.ExitCode)"
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "bundle launched"
+
+      - name: Compile the installer
+        shell: pwsh
+        run: |
+          $iscc = "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if (Test-Path $iscc) {
+            & $iscc packaging/disbox.iss
+          } else {
+            # Inno Setup ships with the Windows runners, but the release must
+            # not be blocked on a path that has never been verified.
+            Write-Warning "Inno Setup not found; publishing the bundle only"
+          }
+
+      - name: Package the bundle
+        shell: pwsh
+        run: Compress-Archive -Path build/dist/Disbox/* -DestinationPath build/disbox-windows.zip
+
+      - name: Upload build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: disbox-windows
+          path: |
+            build/disbox-windows.zip
+            build/installer/*.exe
+          if-no-files-found: warn
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true # reviewed before it is public; nothing here is signed yet
+          generate_release_notes: true
+          files: |
+            build/disbox-windows.zip
+            build/installer/*.exe

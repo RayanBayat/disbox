@@ -1,6 +1,7 @@
 """The settings dialog: configure storage without ever showing the token back."""
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import SecretStr
 from PySide6.QtWidgets import QLineEdit
@@ -13,6 +14,16 @@ from disbox.gui.views.settings_dialog import SettingsDialog
 TOKEN = "fake.token.value"  # noqa: S105 - fixture, not a credential
 
 
+def isolated_settings(**values: Any) -> Settings:
+    """Settings built in isolation from the developer's real .env.
+
+    Without _env_file=None these load the actual file, so a test asserting that
+    no token is configured would quietly check a live credential. The argument
+    is accepted at runtime but missing from the type stubs.
+    """
+    return Settings(_env_file=None, **values)  # type: ignore[call-arg]
+
+
 def open_dialog(qtbot: QtBot, settings: Settings, env: Path) -> SettingsDialog:
     dialog = SettingsDialog(settings, DARK, env_path=env)
     qtbot.addWidget(dialog)
@@ -20,7 +31,7 @@ def open_dialog(qtbot: QtBot, settings: Settings, env: Path) -> SettingsDialog:
 
 
 def test_channel_id_is_shown_because_it_is_not_secret(qtbot: QtBot, tmp_path: Path) -> None:
-    settings = Settings(_env_file=None, bot_token=SecretStr(TOKEN), channel_id=12345)
+    settings = isolated_settings(bot_token=SecretStr(TOKEN), channel_id=12345)
 
     dialog = open_dialog(qtbot, settings, tmp_path / ".env")
 
@@ -29,7 +40,7 @@ def test_channel_id_is_shown_because_it_is_not_secret(qtbot: QtBot, tmp_path: Pa
 
 def test_the_token_is_never_rendered_back(qtbot: QtBot, tmp_path: Path) -> None:
     """Reading a secret out of the UI is a way to leak it, so it is not there."""
-    settings = Settings(_env_file=None, bot_token=SecretStr(TOKEN), channel_id=1)
+    settings = isolated_settings(bot_token=SecretStr(TOKEN), channel_id=1)
 
     dialog = open_dialog(qtbot, settings, tmp_path / ".env")
 
@@ -40,7 +51,7 @@ def test_the_token_is_never_rendered_back(qtbot: QtBot, tmp_path: Path) -> None:
 def test_a_configured_token_is_reported_as_set_without_its_value(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
-    settings = Settings(_env_file=None, bot_token=SecretStr(TOKEN), channel_id=1)
+    settings = isolated_settings(bot_token=SecretStr(TOKEN), channel_id=1)
 
     dialog = open_dialog(qtbot, settings, tmp_path / ".env")
 
@@ -49,20 +60,20 @@ def test_a_configured_token_is_reported_as_set_without_its_value(
 
 
 def test_an_absent_token_is_reported_as_missing(qtbot: QtBot, tmp_path: Path) -> None:
-    dialog = open_dialog(qtbot, Settings(_env_file=None), tmp_path / ".env")
+    dialog = open_dialog(qtbot, isolated_settings(), tmp_path / ".env")
 
     assert "no token is set" in dialog._token_state.text().lower()
 
 
 def test_the_token_field_is_masked(qtbot: QtBot, tmp_path: Path) -> None:
-    dialog = open_dialog(qtbot, Settings(_env_file=None), tmp_path / ".env")
+    dialog = open_dialog(qtbot, isolated_settings(), tmp_path / ".env")
 
     assert dialog._token.echoMode() == QLineEdit.EchoMode.Password
 
 
 def test_saving_writes_the_channel_id(qtbot: QtBot, tmp_path: Path) -> None:
     env = tmp_path / ".env"
-    dialog = open_dialog(qtbot, Settings(_env_file=None), env)
+    dialog = open_dialog(qtbot, isolated_settings(), env)
     dialog._channel.setText("999")
 
     dialog.save()
@@ -72,7 +83,7 @@ def test_saving_writes_the_channel_id(qtbot: QtBot, tmp_path: Path) -> None:
 
 def test_saving_a_new_token_writes_it(qtbot: QtBot, tmp_path: Path) -> None:
     env = tmp_path / ".env"
-    dialog = open_dialog(qtbot, Settings(_env_file=None), env)
+    dialog = open_dialog(qtbot, isolated_settings(), env)
     dialog._token.setText(TOKEN)
 
     dialog.save()
@@ -84,7 +95,7 @@ def test_leaving_the_token_blank_keeps_the_existing_one(qtbot: QtBot, tmp_path: 
     """An empty field means "unchanged", not "erase what is configured"."""
     env = tmp_path / ".env"
     env.write_text(f"DISBOX_BOT_TOKEN={TOKEN}\n", encoding="utf-8")
-    dialog = open_dialog(qtbot, Settings(_env_file=None, bot_token=SecretStr(TOKEN)), env)
+    dialog = open_dialog(qtbot, isolated_settings(bot_token=SecretStr(TOKEN)), env)
     dialog._channel.setText("7")
 
     dialog.save()
@@ -97,7 +108,7 @@ def test_leaving_the_token_blank_keeps_the_existing_one(qtbot: QtBot, tmp_path: 
 def test_saving_does_not_duplicate_existing_keys(qtbot: QtBot, tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text("DISBOX_CHANNEL_ID=1\n", encoding="utf-8")
-    dialog = open_dialog(qtbot, Settings(_env_file=None, channel_id=1), env)
+    dialog = open_dialog(qtbot, isolated_settings(channel_id=1), env)
     dialog._channel.setText("2")
 
     dialog.save()
@@ -110,7 +121,7 @@ def test_saving_does_not_duplicate_existing_keys(qtbot: QtBot, tmp_path: Path) -
 def test_unrelated_env_entries_survive(qtbot: QtBot, tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text("OTHER_APP_KEY=keep-me\n", encoding="utf-8")
-    dialog = open_dialog(qtbot, Settings(_env_file=None), env)
+    dialog = open_dialog(qtbot, isolated_settings(), env)
     dialog._channel.setText("3")
 
     dialog.save()
@@ -120,7 +131,7 @@ def test_unrelated_env_entries_survive(qtbot: QtBot, tmp_path: Path) -> None:
 
 def test_a_non_numeric_channel_is_refused(qtbot: QtBot, tmp_path: Path) -> None:
     env = tmp_path / ".env"
-    dialog = open_dialog(qtbot, Settings(_env_file=None), env)
+    dialog = open_dialog(qtbot, isolated_settings(), env)
     dialog._channel.setText("not-a-number")
 
     dialog.save()

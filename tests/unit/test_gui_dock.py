@@ -13,7 +13,7 @@ def make(qtbot: QtBot) -> TransferDock:
 
 
 def test_starts_hidden(qtbot: QtBot) -> None:
-    assert not make(qtbot).isVisibleTo(None)
+    assert make(qtbot).isHidden()
 
 
 def test_begin_shows_what_is_happening(qtbot: QtBot) -> None:
@@ -52,7 +52,7 @@ def test_end_hides_the_dock_again(qtbot: QtBot) -> None:
 
     dock.end()
 
-    assert not dock.isVisibleTo(None)
+    assert dock.isHidden()
     assert dock.label_text == ""
 
 

@@ -129,6 +129,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M9-3 | README, .env.example | ✅ GUI engine wiring fixed while writing them |
 | M9-1 | PyInstaller bundle | ✅ Builds on 3.14, launches, 149 MB |
 | M9-2 | Inno Setup installer | 🟡 Written, never compiled — Inno Setup unavailable |
+| M9-5 | Release workflow | ✅ Tag-triggered, verifies then builds, draft release |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
@@ -257,6 +258,13 @@ uv run ruff format .         # format
 ---
 
 ## Notes and gotchas
+
+### Run `uv run mypy`, not `uv run mypy src`
+
+`pyproject.toml` sets `files = ["src", "tests"]`, so the bare command checks
+98 files and the `src` form checks 51. CI runs the bare form. Checking only
+`src` reports success while the type gate is red.
+
 
 ### Qt paints from three places, not one
 
