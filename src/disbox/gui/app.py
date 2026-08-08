@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     configure(level="INFO")
     args = sys.argv[1:] if argv is None else argv
     app = QApplication(sys.argv[:1])
+    # Qt's native Windows 11 style paints its own Fluent decorations that no
+    # stylesheet or delegate can suppress -- notably an accent indicator at the
+    # leading edge of every selected cell, which broke rows into visible pieces.
+    # Fusion draws nothing on its own, so the stylesheet is the only authority.
+    app.setStyle("Fusion")
 
     path = Path(args[0]) if args else choose_vault()
     if path is None:

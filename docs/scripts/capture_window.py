@@ -86,6 +86,8 @@ def capture(hwnd: int, path: Path) -> bool:
 def main() -> None:
     """Open the window and save a capture of it."""
     app = QApplication([])
+    # Match the real entry point, or the capture is of a different style.
+    app.setStyle("Fusion")
     vault = Vault.open(Path("demo/my-files.dbx"))
     window = MainWindow(vault, DARK)
     window.resize(1180, 700)

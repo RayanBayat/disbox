@@ -229,6 +229,12 @@ QTableView::item {{
 }}
 QTableView::item:selected {{ color: {p.text}; }}
 
+/* The widget and its sections are painted separately; styling only the
+   sections leaves the header's own background showing behind them. */
+QHeaderView {{
+    background: transparent;
+    border: none;
+}}
 QHeaderView::section {{
     background: transparent;
     border: none;
