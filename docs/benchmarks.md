@@ -5,6 +5,52 @@ Reproduce with the scripts under `docs/scripts/`.
 
 ---
 
+## Transfer pipeline
+
+Local backend, so the numbers describe this codebase rather than a network.
+Incompressible random data, which is the honest worst case: nothing compresses
+and nothing deduplicates. Production chunk spec (256 KiB / 1 MiB / 4 MiB),
+median of three runs. Reproduce with `docs/scripts/bench_transfer.py`.
+
+| Size | Chunking | Upload | Download |
+|---:|---:|---:|---:|
+| 1 MiB | 7.8 MiB/s | 6.8 MiB/s | 85.2 MiB/s |
+| 8 MiB | 5.5 MiB/s | 5.3 MiB/s | 280.4 MiB/s |
+| 64 MiB | 4.7 MiB/s | 4.8 MiB/s | 423.5 MiB/s |
+
+### Upload is chunk-bound, and chunking is slow
+
+Download runs 60–90× faster than upload, and upload tracks chunking almost
+exactly. Profiling 8 MiB confirms where it goes:
+
+```
+7 calls   1.607 s   chunker.py:102(_cut_point)     <- 99% of 1.624 s total
+```
+
+`_cut_point` is the per-byte Gear-hash rolling loop, in pure Python. Neither
+encryption nor storage is the constraint; the content-defined boundary search
+is. At ~5 MiB/s a 1 GB upload spends about **3.5 minutes** on chunking alone
+before a byte is sent.
+
+**This is a real limit on a stated goal, and it is not fixed.** Options, in
+rough order of payoff:
+
+1. **A native FastCDC** (`fastcdc` on PyPI, or a small Rust/C extension). Two
+   orders of magnitude available. Adds a build dependency.
+2. **Vectorise the scan** with `numpy` over the rolling hash. Perhaps 10×,
+   pure-Python deployment preserved.
+3. **Larger `avg_size`.** Fewer boundary searches, at the cost of coarser
+   deduplication. Cheapest, and the least effective.
+
+**Any of them changes where chunk boundaries fall.** Existing vaults would stop
+deduplicating against newly uploaded copies of the same file — old chunks stay
+valid and readable, but the saving is lost until everything is re-uploaded. That
+makes this a decision about migration, not only about speed.
+
+Download needs no such work: it is already faster than any plausible network.
+
+---
+
 ## Search (SPEC.md U4: < 50 ms on 250k nodes)
 
 FTS5 trigram index, `LIMIT 100`.

@@ -134,6 +134,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M10-1 | Chaos tests | ✅ 9 tests; found an untested integrity guard |
 | M10-2 | Soak test | ✅ 6 tests, ~63 s, marked slow; leak detector mutation-checked |
 | M10-3 | Security review | ✅ Self-review, not independent. Found and fixed a path traversal |
+| M10-4 | Benchmarks | ✅ Found upload is chunk-bound at ~5 MiB/s. Not fixed |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
@@ -202,6 +203,11 @@ lose cross-file dedup.
 ---
 
 ## Known limitations
+
+- **Upload runs at ~5 MiB/s and is chunk-bound.** 99% of it is `_cut_point`,
+  the per-byte rolling hash in pure Python. Download is 60-90x faster. Fixing it
+  changes chunk boundaries, so it is a migration decision as well as a
+  performance one -- see `docs/benchmarks.md`.
 
 Recorded rather than glossed, each asserted by a test:
 
