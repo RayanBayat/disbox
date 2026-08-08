@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M6 complete → M7 folder transfer · running under /loop
+**Branch:** `main` · **Current milestone:** M7 complete → M9 CLI (resequenced ahead of M8) · running under /loop
 
 ---
 
@@ -19,11 +19,11 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
 | **M5** | Discord backend | ✅ Complete | 10 / 10 |
 | **M6** | Transfer engine | ✅ Complete | 7 / 7 |
-| **M7** | Filesystem & maintenance | 🟡 In progress | 8 / 9 |
+| **M7** | Filesystem & maintenance | ✅ Complete | 9 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **60 / 81** |
+| | **Total** | | **61 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 391 passed + 13 scale guards (`-m slow`) + 5 live (`-m live`) |
+| Tests | ✅ | 400 passed + 13 scale guards (`-m slow`) + 5 live (`-m live`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -192,7 +192,7 @@ Recorded rather than glossed, each asserted by a test:
 |---|---|
 | **Rebuild does not recover folder structure** | Parents live only in the vault, so a rescan lands recovered files at the root. Contents and filenames now both recover; full fidelity comes from the encrypted vault backup, which does restore structure. |
 | **Convergent encryption is confirmable** | A master-key holder can test whether a specific known file is stored. The accepted cost of deduplicating encrypted data; documented at `derive_chunk_key`. |
-| **Recursive folder transfer not implemented** | Uploading or downloading a whole folder tree in one action (M7-4). Individual files work; the GUI has no folder drop yet. |
+| **The GUI is read-only** | It browses and searches but cannot upload, download, rename or delete. The core supports all of it; wiring is the rest of M8. |
 
 ---
 
