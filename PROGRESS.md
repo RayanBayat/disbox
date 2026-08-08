@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M4 complete → M6 transfer engine · running under /loop
+**Branch:** `main` · **Current milestone:** M5/M6 core done → M7 filesystem · running under /loop
 
 ---
 
@@ -17,13 +17,13 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M2** | Crypto (Argon2id, AES-GCM, headers) | ✅ Complete | 6 / 7 * |
 | **M3** | Chunking & manifest (FastCDC, Merkle) | 🟡 In progress | 4 / 5 |
 | **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
-| M5 | Discord backend | ⚪ Not started | 0 / 10 |
-| M6 | Transfer engine | ⚪ Not started | 0 / 7 |
+| **M5** | Discord backend | 🟡 Core done | 8 / 10 |
+| **M6** | Transfer engine | 🟡 Core done | 4 / 7 |
 | M7 | Filesystem & maintenance | ⚪ Not started | 0 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **35 / 81** |
+| | **Total** | | **47 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 278 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 325 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -152,6 +152,35 @@ Vault now creates real keys via `Vault.create_encrypted` / `unlock`.
 | M3-3 | Entropy probe + conditional zstd | ✅ Never grows incompressible data |
 | M3-4 | Merkle root build/verify | ✅ Domain-separated leaves and nodes |
 | M3-5 | Dedup lookup against `chunks` | ⚪ Lands with the transfer engine (M6) |
+
+---
+
+## M5 / M6 — Storage and transfer
+
+Disbox now stores and retrieves real encrypted files end to end.
+
+| Area | Status |
+|---|---|
+| Transfer engine: chunk → compress → encrypt → store, concurrent | ✅ |
+| Reassembly with per-chunk hash verification | ✅ |
+| Deduplication with refcounts | ✅ |
+| Discord backend, full conformance against a mocked API | ✅ |
+| Rate-limit buckets, bounded retry, idempotent upload | ✅ |
+| Runtime probing of the attachment size limit | ✅ |
+| Resume / cancel (M6-2, M6-5) | ⚪ |
+| Live smoke test against a real channel (M5-10) | ⚪ Needs a token |
+
+### Design decision: convergent encryption
+
+Dedup and per-file keys are mutually exclusive — a shared chunk sealed under one
+file's key is unreadable by every other file referencing it. Chunk keys are
+therefore derived from the content hash, mixed with the vault's master key so
+nothing correlates across vaults.
+
+**Accepted cost:** someone holding the master key can confirm whether a specific
+known file is stored. Standard for deduplicated encrypted storage, documented at
+`derive_chunk_key`, and reversible if you would rather have per-file keys and
+lose cross-file dedup.
 
 ---
 
