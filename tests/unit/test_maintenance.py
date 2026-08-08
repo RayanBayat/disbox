@@ -292,3 +292,85 @@ class TestRebuild:
         with Vault.create_encrypted(tmp_path / "rebuilt.dbx", PASSPHRASE, FAST) as rebuilt:
             care = Maintenance(rebuilt, backend, master_key)
             assert await care.rebuild(vault_id) == 0
+
+
+class TestVaultBackup:
+    async def test_a_vault_survives_losing_its_local_file(  # noqa: PLR0917 - fixtures
+        self,
+        engine: TransferEngine,
+        fs: FileSystem,
+        care: Maintenance,
+        backend: LocalBackend,
+        vault: Vault,
+        tmp_path: Path,
+    ) -> None:
+        """The complete recovery path: structure, names, manifests, and data."""
+        folder = fs.create_directory(None, "Documents")
+        node = fs.create_file(folder, "report.pdf")
+        await engine.upload(node, io.BytesIO(data(20_000)))
+
+        ref = await care.back_up_vault()
+        master_key = vault.unlock(PASSPHRASE)
+        vault.close()
+
+        restored_path = tmp_path / "restored.dbx"
+        with Vault.create_encrypted(tmp_path / "scratch.dbx", PASSPHRASE, FAST) as scratch:
+            await Maintenance(scratch, backend, master_key).restore_vault(ref, restored_path)
+
+        with Vault.open(restored_path) as restored:
+            names = [
+                str(row[0])
+                for row in restored.connection.execute("SELECT name FROM nodes").fetchall()
+            ]
+        assert "report.pdf" in names
+        assert "Documents" in names
+
+    async def test_restoring_over_an_existing_vault_is_refused(
+        self, care: Maintenance, vault: Vault
+    ) -> None:
+        """A restore must never overwrite a vault someone still has."""
+        ref = await care.back_up_vault()
+        with pytest.raises(ValueError, match="already exists"):
+            await care.restore_vault(ref, vault.path)
+
+    async def test_the_backup_is_encrypted(
+        self, engine: TransferEngine, fs: FileSystem, care: Maintenance, backend: LocalBackend
+    ) -> None:
+        await store(engine, fs, "SECRET-NAME-MARKER.bin", data(5_000))
+        ref = await care.back_up_vault()
+        assert b"SECRET-NAME-MARKER" not in await backend.get(ref)
+
+    async def test_a_backup_is_recorded_in_the_vault(self, care: Maintenance, vault: Vault) -> None:
+        await care.back_up_vault()
+        count = vault.connection.execute("SELECT count(*) FROM vault_backups").fetchone()[0]
+        assert count == 1
+
+
+class TestDoctor:
+    async def test_a_healthy_vault_reports_healthy(
+        self, engine: TransferEngine, fs: FileSystem, care: Maintenance
+    ) -> None:
+        await store(engine, fs, "f.bin", data(20_000))
+        report = await care.doctor()
+        assert report["healthy"] is True
+        assert report["live_nodes"] == 1
+
+    async def test_a_damaged_vault_is_reported_unhealthy(
+        self, engine: TransferEngine, fs: FileSystem, care: Maintenance, backend: LocalBackend
+    ) -> None:
+        await store(engine, fs, "f.bin", data(20_000))
+        for ref in [r async for r in backend.iter_all()]:
+            await backend.delete(ref)
+
+        report = await care.doctor()
+        assert report["healthy"] is False
+        assert report["missing_chunks"]
+
+    async def test_the_report_counts_the_trash(
+        self, engine: TransferEngine, fs: FileSystem, care: Maintenance
+    ) -> None:
+        node = await store(engine, fs, "f.bin", data(10_000))
+        fs.delete(node)
+        report = await care.doctor()
+        assert report["trashed_nodes"] == 1
+        assert report["live_nodes"] == 0

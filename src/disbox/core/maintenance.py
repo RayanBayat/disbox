@@ -19,13 +19,25 @@ The grace period exists so that a purge someone regrets is still recoverable
 from the backend for a while afterwards.
 """
 
+import contextlib
 import sqlite3
+import tempfile
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Final
 
 from disbox.backends.base import BlobRef, StorageBackend
-from disbox.core.crypto import CHUNK_HEADER_MAGIC, ChunkHeader, decode_chunk_header
+from disbox.core import compression
+from disbox.core.crypto import (
+    CHUNK_HEADER_MAGIC,
+    ChunkHeader,
+    decode_chunk_header,
+    derive_chunk_key,
+    open_chunk,
+    seal_chunk,
+)
+from disbox.core.integrity import check_invariants
 from disbox.core.journal import record
 from disbox.core.vault import Vault
 from disbox.errors import CryptoError
@@ -40,6 +52,9 @@ DEFAULT_GRACE_SECONDS: Final = 24 * 3600
 
 #: Enough of a blob to read its header without downloading the payload.
 _HEADER_PROBE: Final = 4096
+
+#: Domain tag for the vault-backup key, so it is distinct from any chunk key.
+_VAULT_BACKUP_TAG: Final = b"disbox/vault-backup/v1"
 
 
 class Maintenance:
@@ -259,6 +274,106 @@ class Maintenance:
                 now,
             ),
         )
+
+    # -------------------------------------------------------- vault backup --
+
+    async def back_up_vault(self) -> BlobRef:
+        """Store an encrypted copy of the vault itself on the backend.
+
+        The vault is the one thing a rescan cannot fully reconstruct: it holds
+        the folder structure, the manifests, and the wrapped key. Keeping an
+        encrypted copy beside the data turns losing the local file from a
+        partial recovery into a complete one.
+
+        The copy is taken with SQLite's backup API, not by reading the file:
+        the vault is open, and copying an open WAL database captures the main
+        file and the log at different instants, producing something that looks
+        valid and restores broken.
+
+        Returns:
+            A reference to the stored copy.
+        """
+        with tempfile.TemporaryDirectory() as scratch:
+            staging = Path(scratch) / "vault-copy.dbx"
+            with contextlib.closing(sqlite3.connect(staging)) as destination:
+                self._vault.connection.backup(destination)
+
+            raw = staging.read_bytes()
+
+        packed, compressed = compression.compress(raw)
+        payload = bytes([int(compressed)]) + packed
+        key = derive_chunk_key(self._master_key, _VAULT_BACKUP_TAG)
+        sealed = seal_chunk(key, 0, payload)
+
+        stamp = datetime.now(UTC)
+        ref = await self._backend.put(
+            sealed, idempotency_key=f"vault-{stamp.strftime('%Y%m%dT%H%M%S')}"
+        )
+
+        nodes = self._vault.connection.execute("SELECT count(*) FROM nodes").fetchone()[0]
+        with self._vault.connection as conn:
+            conn.execute(
+                "INSERT INTO vault_backups (created_at, message_id, size, node_count) "
+                "VALUES (?, ?, ?, ?)",
+                (stamp.isoformat(), ref.locator, max(1, len(sealed)), nodes),
+            )
+        logger.info("vault backed up", bytes=len(sealed), nodes=nodes)
+        return ref
+
+    async def restore_vault(self, ref: BlobRef, destination: Path) -> None:
+        """Write a backed-up vault to `destination`.
+
+        Args:
+            ref: Reference returned by `back_up_vault`.
+            destination: Where to write. Must not already exist, so a restore
+                can never overwrite a vault someone still has.
+
+        Raises:
+            ValueError: If `destination` is occupied.
+            CryptoError: If the copy cannot be decrypted or was damaged.
+        """
+        if destination.exists():
+            msg = f"{destination} already exists; restore to a new path"
+            raise ValueError(msg)
+
+        sealed = await self._backend.get(ref)
+        key = derive_chunk_key(self._master_key, _VAULT_BACKUP_TAG)
+        payload = open_chunk(key, 0, sealed)
+        destination.write_bytes(compression.decompress(payload[1:], compressed=bool(payload[0])))
+        logger.info("vault restored", path=str(destination))
+
+    # -------------------------------------------------------------- doctor --
+
+    async def doctor(self) -> dict[str, object]:
+        """One-shot health report.
+
+        Gathers everything worth knowing in a single pass so a user with a
+        suspicion has something concrete to act on, rather than several
+        commands to run and correlate themselves.
+        """
+        invariants = check_invariants(self._vault.connection)
+        missing = await self.verify()
+        counts = self._vault.connection.execute(
+            "SELECT "
+            "(SELECT count(*) FROM nodes WHERE deleted_at IS NULL), "
+            "(SELECT count(*) FROM nodes WHERE deleted_at IS NOT NULL), "
+            "(SELECT count(*) FROM chunks), "
+            "(SELECT count(*) FROM chunks WHERE refcount = 0), "
+            "(SELECT coalesce(sum(size), 0) FROM nodes WHERE deleted_at IS NULL AND kind = 'file'),"
+            "(SELECT count(*) FROM vault_backups)"
+        ).fetchone()
+
+        return {
+            "healthy": not invariants and not missing,
+            "live_nodes": counts[0],
+            "trashed_nodes": counts[1],
+            "chunks": counts[2],
+            "unreferenced_chunks": counts[3],
+            "stored_bytes": counts[4],
+            "remote_backups": counts[5],
+            "invariant_violations": invariants,
+            "missing_chunks": missing,
+        }
 
     async def _read_header(self, ref: BlobRef) -> ChunkHeader | None:
         """Read and decrypt a blob's header, or None if it is not ours."""
