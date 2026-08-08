@@ -12,7 +12,12 @@ concurrency:
 
 env:
   # Fail rather than silently reaching for a different interpreter.
-  UV_PYTHON_DOWNLOADS: only-managed
+  #
+  # This is UV_PYTHON_PREFERENCE, not UV_PYTHON_DOWNLOADS: "only-managed" is not
+  # a value the latter accepts, and uv rejects the whole invocation on sight. It
+  # made every job fail at whichever uv command came first, which read as a
+  # dependency problem and was nothing of the kind.
+  UV_PYTHON_PREFERENCE: only-managed
 
 jobs:
   quality:
@@ -26,7 +31,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -71,7 +76,7 @@ jobs:
     name: scale guards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -109,7 +114,7 @@ jobs:
     name: dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
