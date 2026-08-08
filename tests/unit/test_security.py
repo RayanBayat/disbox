@@ -6,6 +6,7 @@ filesystem instruction on the machine doing the downloading, which is the
 mechanism these tests exist to close.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -17,9 +18,15 @@ from tests.unit.test_vault import KEYS
 
 
 @pytest.fixture
-def filesystem(tmp_path: Path) -> FileSystem:
-    vault = Vault.create(tmp_path / "sec.dbx", KEYS)
-    return FileSystem(vault)
+def filesystem(tmp_path: Path) -> Iterator[FileSystem]:
+    """A filesystem over a vault that is closed again afterwards.
+
+    Returning without closing leaks the SQLite connection for every test that
+    uses it, and pytest fails the run at teardown over the unraisable
+    ResourceWarning -- after reporting every test as passed.
+    """
+    with Vault.create(tmp_path / "sec.dbx", KEYS) as vault:
+        yield FileSystem(vault)
 
 
 @pytest.mark.parametrize(

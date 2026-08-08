@@ -1,6 +1,7 @@
 """Snapshots are the local safety net under the vault file."""
 
 from datetime import UTC, datetime, timedelta
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,10 @@ from tests.unit.test_vault import KEYS
 
 
 @pytest.fixture
-def vault(tmp_path: Path) -> Vault:
-    return Vault.create(tmp_path / "test.dbx", KEYS)
+def vault(tmp_path: Path) -> Iterator[Vault]:
+    """A vault that is closed again, so its connection is not leaked."""
+    with Vault.create(tmp_path / "test.dbx", KEYS) as opened:
+        yield opened
 
 
 @pytest.fixture
