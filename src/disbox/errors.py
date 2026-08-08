@@ -26,6 +26,10 @@ class CryptoError(DisboxError):
     """A key could not be derived, or data failed to decrypt or authenticate."""
 
 
+class FileSystemError(DisboxError):
+    """A tree operation was invalid or would have damaged the tree."""
+
+
 class BackendError(DisboxError):
     """A storage backend refused a request or returned something unusable."""
 
