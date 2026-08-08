@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M3 — Chunking (4 / 5) · running under /loop
+**Branch:** `main` · **Current milestone:** M4 complete → M6 transfer engine · running under /loop
 
 ---
 
@@ -16,14 +16,14 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M1** | Vault (SQLite, snapshots, integrity) | ✅ Complete | 8 / 8 |
 | **M2** | Crypto (Argon2id, AES-GCM, headers) | ✅ Complete | 6 / 7 * |
 | **M3** | Chunking & manifest (FastCDC, Merkle) | 🟡 In progress | 4 / 5 |
-| M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
+| **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
 | M5 | Discord backend | ⚪ Not started | 0 / 10 |
 | M6 | Transfer engine | ⚪ Not started | 0 / 7 |
 | M7 | Filesystem & maintenance | ⚪ Not started | 0 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **32 / 81** |
+| | **Total** | | **35 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 258 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 278 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -151,7 +151,7 @@ Vault now creates real keys via `Vault.create_encrypted` / `unlock`.
 | M3-2 | BLAKE3 chunk hashing | ✅ |
 | M3-3 | Entropy probe + conditional zstd | ✅ Never grows incompressible data |
 | M3-4 | Merkle root build/verify | ✅ Domain-separated leaves and nodes |
-| M3-5 | Dedup lookup against `chunks` | ⚪ Next — needs the backend protocol |
+| M3-5 | Dedup lookup against `chunks` | ⚪ Lands with the transfer engine (M6) |
 
 ---
 
