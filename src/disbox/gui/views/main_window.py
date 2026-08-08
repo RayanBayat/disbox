@@ -64,6 +64,7 @@ from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
 from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.folder_tree import FolderTree
+from disbox.gui.views.properties_dialog import PropertiesDialog
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
 from disbox.gui.views.transfer_dock import TransferDock
 from disbox.gui.views.trash_dialog import TrashDialog
@@ -443,6 +444,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             (QKeySequence.StandardKey.Find, self._search_box.setFocus),
             (QKeySequence("Ctrl+Shift+N"), self.prompt_new_folder),
             (QKeySequence("F2"), self.prompt_rename),
+            (QKeySequence("Alt+Return"), self.show_properties),
             (QKeySequence.StandardKey.Delete, self.delete_selected),
         ):
             action = QAction(self)
@@ -464,11 +466,22 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             label = "Delete" if len(selection) == 1 else f"Delete {len(selection)} items"
             menu.addAction(label, self.delete_selected)
             menu.addSeparator()
+        if len(selection) == 1:
+            menu.addAction("Properties", self.show_properties).setShortcut(
+                QKeySequence("Alt+Return")
+            )
         menu.addAction("New folder", self.prompt_new_folder).setShortcut(
             QKeySequence("Ctrl+Shift+N")
         )
 
         menu.exec(self._table.viewport().mapToGlobal(position))
+
+    def show_properties(self) -> None:
+        """Describe the single selected node in full."""
+        nodes = self.selected_nodes
+        if len(nodes) != 1:
+            return
+        PropertiesDialog(self._vault, nodes[0], self._palette, self).exec()
 
     def open_trash(self) -> None:
         """Show the trash, refreshing this window if anything is restored."""
