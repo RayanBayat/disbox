@@ -99,7 +99,8 @@ class TestUploadFolder:
             if self.name == "spec.md":
                 msg = "permission denied"
                 raise OSError(msg)
-            return original(self, *args, **kwargs)
+            opened: IO[Any] = original(self, *args, **kwargs)
+            return opened
 
         monkeypatch.setattr(Path, "open", refuse)
         result = await tree.upload_folder(sample, None)
