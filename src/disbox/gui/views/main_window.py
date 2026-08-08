@@ -49,6 +49,7 @@ from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
+from disbox.gui.bridge import AsyncBridge
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.backdrop import (
@@ -75,10 +76,20 @@ _ICON_BUTTON: Final = 30
 class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     """Browse a vault: navigate directories, search, and inspect."""
 
-    def __init__(self, vault: Vault, palette: Palette = DARK) -> None:
-        """Open a window onto `vault`, showing its root directory."""
+    def __init__(
+        self, vault: Vault, palette: Palette = DARK, *, bridge: AsyncBridge | None = None
+    ) -> None:
+        """Open a window onto `vault`, showing its root directory.
+
+        Args:
+            vault: The vault to browse.
+            palette: Starting theme.
+            bridge: Where asynchronous work is submitted. Optional so tests and
+                read-only use need not start a thread they will not use.
+        """
         super().__init__()
         self._vault = vault
+        self._bridge = bridge
         self._palette = palette
         self._directory: uuid.UUID | None = None
         self._history: list[uuid.UUID | None] = []

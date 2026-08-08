@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
+from disbox.gui.bridge import AsyncBridge
 from disbox.gui.views.main_window import MainWindow
 from disbox.log import configure, get_logger
 
@@ -58,11 +59,16 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("vault could not be opened", path=str(path), reason=str(exc))
         return 1
 
+    bridge = AsyncBridge()
+    bridge.start()
     try:
-        window = MainWindow(vault)
+        window = MainWindow(vault, bridge=bridge)
         window.show()
         return app.exec()
     finally:
+        # Order matters: the loop must stop before the vault closes, or work
+        # still in flight would reach a closed database.
+        bridge.stop()
         vault.close()  # always release the single-writer lock
 
 
