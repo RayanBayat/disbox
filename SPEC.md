@@ -577,7 +577,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 - [x] **M8-9** Trash view, Properties dialog, Settings dialog.
 - [ ] **M8-10** Setup wizard + unlock screen + vault picker.
 - [x] **M8-11** Undo stack over the journal.
-- [ ] **M8-12** Error/notification center with copyable diagnostic IDs; zero blocking modals for errors.
+- [x] **M8-12** Error/notification center with copyable diagnostic IDs; zero blocking modals for errors.
 - [x] **M8-13** Theming (light/dark, follows OS) + QSS design tokens + icon set.
 - [ ] **M8-14** Accessibility pass: keyboard reachability, accessible names, DPI/font scaling.
 - [ ] **M8-15** `pytest-qt` tests for every dialog and the main window flows.

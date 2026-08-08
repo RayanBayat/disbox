@@ -56,6 +56,7 @@ from disbox.core.vault import Vault
 from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge, AsyncTask, Work
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
+from disbox.gui.notifications import NotificationLog
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.backdrop import (
     round_window_corners,
@@ -67,6 +68,7 @@ from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
 from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.folder_tree import FolderTree
+from disbox.gui.views.notifications_dialog import NotificationsDialog
 from disbox.gui.views.properties_dialog import PropertiesDialog
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
 from disbox.gui.views.settings_dialog import SettingsDialog
@@ -117,6 +119,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._queue: list[Path] = []
         self._transferring = False
         self._current_task: AsyncTask | None = None
+        self.notifications = NotificationLog()
         self._palette = palette
         self._directory: uuid.UUID | None = None
         self._history: list[uuid.UUID | None] = []
@@ -290,6 +293,9 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         self._theme_button = self._icon_button("contrast", "Switch theme")
         self._theme_button.clicked.connect(self.toggle_theme)
+        self._notices_button = self._icon_button("info", "Notifications")
+        self._notices_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._notices_button.clicked.connect(self.open_notifications)
         self._settings_button = self._icon_button("settings", "Settings")
         self._settings_button.clicked.connect(self.open_settings)
 
@@ -331,6 +337,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         glyph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         layout.addWidget(search_wrap)
+        layout.addWidget(self._notices_button)
         layout.addWidget(self._theme_button)
         layout.addWidget(self._settings_button)
         return header
@@ -723,7 +730,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         if not sources:
             return
         if self._engine is None:
-            self._report("Storage is not configured, so uploads are unavailable")
+            self._report_problem("Storage is not configured, so uploads are unavailable")
             return
 
         self._queue.extend(sources)
@@ -790,7 +797,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         if not nodes:
             return
         if self._engine is None:
-            self._report("Storage is not configured, so downloads are unavailable")
+            self._report_problem("Storage is not configured, so downloads are unavailable")
             return
 
         engine = self._engine
@@ -855,7 +862,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         One unreadable file must not abandon the others the user selected.
         """
-        self._report(message)
+        self._report_problem(message)
         self._start_next_upload()
 
     # ------------------------------------------------------- file operations --
@@ -886,7 +893,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         try:
             node_id = filesystem.create_directory(self._directory, free)
         except DisboxError as exc:
-            self._report(str(exc))
+            self._report_problem(str(exc))
             return None
 
         self._refresh()
@@ -907,7 +914,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         try:
             FileSystem(self._vault).rename(nodes[0], new_name)
         except DisboxError as exc:
-            self._report(str(exc))
+            self._report_problem(str(exc))
             return
 
         self._refresh()
@@ -929,7 +936,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             for node_id in nodes:
                 affected += filesystem.delete(node_id)
         except DisboxError as exc:
-            self._report(str(exc))
+            self._report_problem(str(exc))
 
         self._refresh()
         self.tree.reload()
@@ -947,12 +954,41 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
                 return
 
     def _report(self, message: str) -> None:
-        """Show a recoverable failure without interrupting the user.
-
-        A blocking modal for something the user can simply retry is the thing
-        SPEC M8-12 rules out, so this goes to the status bar.
-        """
+        """Note something that went as intended."""
+        if message:
+            self.notifications.info(message)
         self._status.setText(message)
+        self._update_notice_badge()
+
+    def _report_problem(self, message: str) -> None:
+        """Record a failure without interrupting the user.
+
+        A blocking modal for something the user can retry is what SPEC M8-12
+        rules out, so this goes to the log and the status bar. The identifier is
+        shown inline because a user who never opens the log still needs
+        something quotable.
+        """
+        notice = self.notifications.error(message)
+        self._status.setText(f"{message}  [{notice.diagnostic_id}]")
+        self._update_notice_badge()
+
+    def _update_notice_badge(self) -> None:
+        """Show how many problems are waiting to be read."""
+        pending = self.notifications.unread_problems
+        self._notices_button.setText(str(pending) if pending else "")
+        # The icon buttons are a fixed square, which clips a count. Widen this
+        # one only while it is carrying one.
+        self._notices_button.setFixedSize(
+            _ICON_BUTTON + 14 if pending else _ICON_BUTTON, _ICON_BUTTON
+        )
+        self._notices_button.setToolTip(
+            f"{pending} unread problem{'' if pending == 1 else 's'}" if pending else "Notifications"
+        )
+
+    def open_notifications(self) -> None:
+        """Show the notification history."""
+        NotificationsDialog(self.notifications, self._palette, self).exec()
+        self._update_notice_badge()
 
     def _on_selection_changed(self) -> None:
         """Describe the selection, but only when it is unambiguous."""
