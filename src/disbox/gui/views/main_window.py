@@ -50,7 +50,7 @@ from disbox.gui.views.row_delegate import AnimatedRowDelegate
 __all__ = ["MainWindow"]
 
 _SEARCH_RESULT_LIMIT: Final = 500
-_ROW_HEIGHT: Final = 40
+_ROW_HEIGHT: Final = 44
 _SIDEBAR_WIDTH: Final = 208
 _ICON_BUTTON: Final = 30
 
@@ -128,7 +128,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         vault_row.addStretch(1)
         layout.addLayout(vault_row)
 
-        section = QLabel("PLACES")
+        section = QLabel("Places")
         section.setObjectName("SectionLabel")
         layout.addWidget(section)
 

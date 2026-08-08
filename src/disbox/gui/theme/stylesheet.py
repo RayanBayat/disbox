@@ -38,7 +38,7 @@ QWidget#TitleBar {{
 
 QLabel#TitleText {{
     font-size: {Type.BODY}px;
-    font-weight: 600;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
     color: {p.text_muted};
 }}
 
@@ -79,22 +79,21 @@ QWidget#HeaderBar {{
 }}
 
 QLabel#BrandName {{
-    font-size: {Type.SUBTITLE}px;
-    font-weight: 600;
+    font-size: {Type.BODY_STRONG}px;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
     color: {p.text};
 }}
 
 QLabel#SectionLabel {{
     font-size: {Type.CAPTION}px;
-    font-weight: 600;
-    color: {p.text_subtle};
-    letter-spacing: 0.6px;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
+    color: {p.text_muted};
     padding: {Space.SM}px {Space.MD}px {Space.XS}px {Space.MD}px;
 }}
 
 QLabel#MeterCaption {{
     font-size: {Type.BODY}px;
-    font-weight: 600;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
     color: {p.text};
 }}
 
@@ -104,8 +103,8 @@ QLabel#StatusText {{
 }}
 
 QLabel#EmptyTitle {{
-    font-size: {Type.TITLE}px;
-    font-weight: 600;
+    font-size: {Type.SUBTITLE}px;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
     color: {p.text_muted};
 }}
 
@@ -134,7 +133,7 @@ QPushButton#NavItem:hover {{
 QPushButton#NavItem:checked {{
     background: {p.accent_subtle};
     color: {p.text};
-    font-weight: 600;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
 }}
 
 /* ---- Toolbar buttons --------------------------------------------------- */
@@ -160,7 +159,10 @@ QPushButton#Crumb {{
     font-size: {Type.BODY}px;
 }}
 QPushButton#Crumb:hover {{ background: {p.surface_hover}; color: {p.text}; }}
-QPushButton#Crumb[current="true"] {{ color: {p.text}; font-weight: 600; }}
+QPushButton#Crumb[current="true"] {{
+    color: {p.text};
+    font-weight: {Type.WEIGHT_SEMIBOLD};
+}}
 
 QLabel#CrumbSep {{ color: {p.text_subtle}; }}
 
@@ -202,7 +204,7 @@ QHeaderView::section {{
     padding: {Space.SM}px;
     color: {p.text_muted};
     font-size: {Type.CAPTION}px;
-    font-weight: 600;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
 }}
 QHeaderView::section:hover {{ color: {p.text}; }}
 QHeaderView::up-arrow, QHeaderView::down-arrow {{
@@ -219,13 +221,14 @@ QWidget#Details {{
     border-left: 1px solid {p.border};
 }}
 QLabel#DetailName {{
-    font-size: {Type.SUBTITLE}px;
-    font-weight: 600;
+    font-size: {Type.BODY_STRONG}px;
+    font-weight: {Type.WEIGHT_SEMIBOLD};
     color: {p.text};
 }}
 QLabel#DetailKey {{
     font-size: {Type.CAPTION}px;
-    color: {p.text_subtle};
+    font-weight: {Type.WEIGHT_SEMIBOLD};
+    color: {p.text_muted};
 }}
 QLabel#DetailValue {{
     font-size: {Type.BODY}px;

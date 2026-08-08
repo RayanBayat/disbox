@@ -79,7 +79,7 @@ DARK: Final = Palette(
     border_strong="rgba(255, 255, 255, 0.14)",
     text="#F5F2F4",
     text_muted="#B0A9B4",
-    text_subtle="#7A737E",
+    text_subtle="#9A929E",
     accent="#8B7BFF",
     accent_hover="#9E90FF",
     accent_text="#FFFFFF",
@@ -109,7 +109,7 @@ LIGHT: Final = Palette(
     border_strong="rgba(0, 0, 0, 0.14)",
     text="#1A1519",
     text_muted="#635C66",
-    text_subtle="#8F878F",
+    text_subtle="#6E666E",
     accent="#5B4BE8",
     accent_hover="#4A3AD6",
     accent_text="#FFFFFF",
@@ -129,14 +129,25 @@ LIGHT: Final = Palette(
 
 
 class Space:
-    """A 4px spacing grid."""
+    """Fluent 2's spacing ramp, on a 4px base.
 
+    The 2, 6 and 10 steps exist because Fluent icons carry internal padding;
+    they are what let an icon sit on the four-pixel grid without being nudged
+    by hand. Omitting them is why icon rows previously needed manual offsets.
+    """
+
+    XXS: Final = 2
     XS: Final = 4
+    SM_XS: Final = 6
     SM: Final = 8
+    SM_MD: Final = 10
     MD: Final = 12
     LG: Final = 16
+    LG_XL: Final = 20
     XL: Final = 24
+    XL_XXL: Final = 28
     XXL: Final = 32
+    XXXL: Final = 40
 
 
 class Radius:
@@ -150,20 +161,55 @@ class Radius:
 
 
 class Type:
-    """Typography.
+    """The Windows 11 type ramp.
 
-    Segoe UI Variable is the Windows 11 system face and is what makes an app
-    look native there; the rest are fallbacks for other platforms.
+    Sizes and line heights are taken from Microsoft's published ramp rather than
+    chosen, because Windows sets a hard legibility floor -- 14px Regular and
+    12px Semibold -- below which "text is illegible in some languages". The
+    previous scale sat a step under that at 13px body and 11px captions.
+
+    Line heights are part of the ramp, not decoration: Fluent distributes
+    vertical space by baseline alignment, so a size without its paired line
+    height cannot produce a consistent rhythm.
+
+    Segoe UI Variable is the system face, and its optical-size axis is what
+    keeps small text legible; substituting a bundled font would look imported
+    rather than native.
+
+    Bold and italic are deliberately absent. The ramp uses Semibold for
+    emphasis, and italic is excluded because it reduces readability,
+    particularly for readers with dyslexia.
     """
 
     FAMILY: Final = '"Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif'
     MONO: Final = '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
 
-    CAPTION: Final = 11
-    BODY: Final = 13
-    SUBTITLE: Final = 14
-    TITLE: Final = 17
-    DISPLAY: Final = 22
+    #: 12/16 -- the smallest permitted, and only ever at Semibold.
+    CAPTION: Final = 12
+    CAPTION_LEADING: Final = 16
+
+    #: 14/20 -- the default for everything the user reads.
+    BODY: Final = 14
+    BODY_LEADING: Final = 20
+
+    #: 14/20 Semibold. Emphasis without a size change.
+    BODY_STRONG: Final = 14
+
+    #: 20/28.
+    SUBTITLE: Final = 20
+    SUBTITLE_LEADING: Final = 28
+
+    #: 28/36.
+    TITLE: Final = 28
+    TITLE_LEADING: Final = 36
+
+    #: 40/52.
+    DISPLAY: Final = 40
+    DISPLAY_LEADING: Final = 52
+
+    #: Semibold, per the ramp. Bold is not part of it.
+    WEIGHT_REGULAR: Final = 400
+    WEIGHT_SEMIBOLD: Final = 600
 
 
 class Motion:
