@@ -568,7 +568,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 
 - [x] **M8-1** Qt ⇄ asyncio bridge: event loop on a `QThread`, queued signals, clean shutdown. *AC: no cross-thread Qt object access; verified under `pytest-qt`.*
 - [x] **M8-2** `QAbstractTableModel` over paged SQLite (U1). *AC: 250 k rows scroll at 60 fps; memory flat.*
-- [ ] **M8-3** Folder tree with lazy expansion.
+- [x] **M8-3** Folder tree with lazy expansion.
 - [x] **M8-4** Main window shell: toolbar, breadcrumbs, splitters, status bar, persisted layout.
 - [x] **M8-5** Transfer dock: per-item and aggregate progress, pause/resume/cancel/retry.
 - [x] **M8-6** All §6.3 filesystem operations wired, with the collision-policy dialog.

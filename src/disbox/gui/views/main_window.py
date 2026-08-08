@@ -66,6 +66,7 @@ from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.folder_tree import FolderTree
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
 from disbox.gui.views.transfer_dock import TransferDock
+from disbox.gui.views.trash_dialog import TrashDialog
 
 __all__ = ["MainWindow"]
 
@@ -208,7 +209,8 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         layout.addWidget(section)
 
         self._nav_buttons: dict[str, QPushButton] = {}
-        for key, label, icon_name in (("vault", "All files", "vault"),):  # more places with M7
+        places = (("vault", "All files", "vault"), ("trash", "Trash", "trash"))
+        for key, label, icon_name in places:
             button = QPushButton(f"  {label}")
             button.setObjectName("NavItem")
             button.setIcon(icons.icon(icon_name, self._palette.text_muted, size=18, ratio=2.0))
@@ -217,7 +219,11 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             button.setChecked(key == "vault")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-            button.clicked.connect(lambda _=False: self.navigate_to(None))
+            if key == "trash":
+                button.setCheckable(False)
+                button.clicked.connect(lambda _=False: self.open_trash())
+            else:
+                button.clicked.connect(lambda _=False: self.navigate_to(None))
             self._nav_buttons[key] = button
             layout.addWidget(button)
 
@@ -463,6 +469,17 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         )
 
         menu.exec(self._table.viewport().mapToGlobal(position))
+
+    def open_trash(self) -> None:
+        """Show the trash, refreshing this window if anything is restored."""
+        dialog = TrashDialog(self._vault, self._palette, self)
+        dialog.vault_changed.connect(self._on_vault_changed)
+        dialog.exec()
+
+    def _on_vault_changed(self) -> None:
+        """Re-read everything that reflects the tree."""
+        self._refresh()
+        self.tree.reload()
 
     def prompt_new_folder(self) -> None:
         """Ask for a folder name, then create it."""

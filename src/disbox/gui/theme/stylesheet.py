@@ -341,6 +341,20 @@ def _opaque(colour: str) -> str:
 def _dock_rules(p: Palette, panel: str) -> str:
     """Rules for the transfer dock, kept together for legibility."""
     return f"""
+QListWidget#TrashList {{
+    background: {panel};
+    border: 1px solid {p.border};
+    border-radius: {Radius.MD}px;
+    padding: {Space.XS}px;
+}}
+QListWidget#TrashList::item {{
+    padding: {Space.SM}px;
+    border-radius: {Radius.SM}px;
+    color: {p.text};
+}}
+QListWidget#TrashList::item:hover {{ background: {p.surface_hover}; }}
+QListWidget#TrashList::item:selected {{ background: {p.accent_subtle}; color: {p.text}; }}
+
 QTreeWidget#FolderTree {{
     background: transparent;
     border: none;
