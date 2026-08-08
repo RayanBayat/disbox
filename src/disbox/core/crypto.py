@@ -140,6 +140,11 @@ class ChunkHeader:
     chunk_count: int
     plaintext_hash: bytes
     plaintext_size: int
+    #: The node's name at upload time. Encrypted with the rest of the header,
+    #: so it identifies a blob to its owner without exposing the filesystem.
+    #: Without it a rescan recovers contents under placeholder names, which
+    #: leaves the user to re-identify every file by hand.
+    name_hint: str = ""
 
 
 def generate_master_key() -> bytes:
@@ -337,6 +342,7 @@ def encode_chunk_header(master_key: bytes, header: ChunkHeader) -> bytes:
             "c": header.chunk_count,
             "h": header.plaintext_hash,
             "s": header.plaintext_size,
+            "f": header.name_hint,
         }
     )
     key = _hkdf(master_key, _INFO_HEADER)
@@ -404,6 +410,8 @@ def decode_chunk_header(master_key: bytes, blob: bytes) -> ChunkHeader:
         chunk_count=payload["c"],
         plaintext_hash=payload["h"],
         plaintext_size=payload["s"],
+        # Absent in headers written before the field existed.
+        name_hint=payload.get("f", ""),
     )
 
 

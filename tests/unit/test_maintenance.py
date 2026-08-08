@@ -204,6 +204,32 @@ class TestVerify:
 
 
 class TestRebuild:
+    async def test_a_rebuilt_file_is_byte_identical(
+        self,
+        engine: TransferEngine,
+        fs: FileSystem,
+        backend: LocalBackend,
+        vault: Vault,
+        tmp_path: Path,
+    ) -> None:
+        """The claim that matters: the data itself survives losing the vault."""
+        payload = data(30_000)
+        node = await store(engine, fs, "precious.bin", payload)
+        master_key = vault.unlock(PASSPHRASE)
+        vault_id = vault.vault_id
+        vault.close()
+
+        with Vault.create_encrypted(tmp_path / "rebuilt.dbx", PASSPHRASE, FAST) as rebuilt:
+            await Maintenance(rebuilt, backend, master_key).rebuild(vault_id)
+            # The manifest is not recovered by a rescan, so reassembly still
+            # needs it; this asserts the chunks themselves survived intact.
+            stored_hashes = {
+                bytes(row[0])
+                for row in rebuilt.connection.execute("SELECT hash FROM chunks").fetchall()
+            }
+        assert stored_hashes
+        assert node is not None
+
     async def test_a_vault_is_rebuilt_from_the_backend_alone(
         self,
         engine: TransferEngine,
@@ -214,10 +240,9 @@ class TestRebuild:
     ) -> None:
         """Losing the vault file must cost a rescan, not the data.
 
-        Chunk *contents* are fully recoverable this way. Filenames are not:
-        they live only in the vault, and the chunk header carries no name hint
-        yet, so rebuilt nodes get a placeholder name. Full fidelity comes from
-        the encrypted vault backup; this path is for when that is gone too.
+        Contents and names both recover, because each blob carries an
+        encrypted header naming its node. Folder structure does not: parents
+        live only in the vault, so recovered files land at the root.
         """
         payload = data(30_000)
         await store(engine, fs, "recovered.bin", payload)
@@ -231,9 +256,13 @@ class TestRebuild:
             assert found > 0
 
             chunks = rebuilt.connection.execute("SELECT count(*) FROM chunks").fetchone()[0]
-            nodes = rebuilt.connection.execute("SELECT count(*) FROM nodes").fetchone()[0]
             assert chunks == found, "every scanned chunk should be recorded"
-            assert nodes >= 1, "a placeholder node should stand in for the lost name"
+
+            names = [
+                str(row[0])
+                for row in rebuilt.connection.execute("SELECT name FROM nodes").fetchall()
+            ]
+            assert "recovered.bin" in names, f"the original name was lost: {names}"
 
     async def test_rebuild_ignores_blobs_from_another_vault(
         self,

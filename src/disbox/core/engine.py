@@ -155,6 +155,12 @@ class TransferEngine:
         Raises:
             TransferError: If a chunk could not be stored.
         """
+        # Read once here, on the calling thread: sealing runs in a worker and
+        # SQLite connections are bound to the thread that created them.
+        row = self._vault.connection.execute(
+            "SELECT name FROM nodes WHERE id = ?", (node_id.bytes,)
+        ).fetchone()
+        name = str(row[0]) if row else ""
         chunks = list(chunk_stream(source, self._spec))
         total_bytes = sum(len(chunk.data) for chunk in chunks)
 
@@ -176,7 +182,7 @@ class TransferEngine:
         async def handle(chunk: Chunk) -> None:
             nonlocal done
             async with self._semaphore:
-                stored[chunk.index] = await self._store_chunk(node_id, chunk)
+                stored[chunk.index] = await self._store_chunk(node_id, chunk, name)
             done += 1
             report()
 
@@ -202,7 +208,7 @@ class TransferEngine:
         )
         return revision_id
 
-    async def _store_chunk(self, node_id: uuid.UUID, chunk: Chunk) -> _StoredChunk:
+    async def _store_chunk(self, node_id: uuid.UUID, chunk: Chunk, name: str) -> _StoredChunk:
         """Put one chunk on the backend, skipping the work if it is already there."""
         digest = await asyncio.to_thread(hash_chunk, chunk.data)
         if (seen := self._in_flight.get(digest)) is not None:
@@ -233,7 +239,7 @@ class TransferEngine:
                 deduplicated=True,
             )
 
-        body = await asyncio.to_thread(self._seal, chunk, node_id, digest)
+        body = await asyncio.to_thread(self._seal, chunk, node_id, digest, name)
         ref = await self._backend.put(body, idempotency_key=digest.hex())
         result = _StoredChunk(
             index=chunk.index,
@@ -246,7 +252,7 @@ class TransferEngine:
         self._in_flight[digest] = result
         return result
 
-    def _seal(self, chunk: Chunk, node_id: uuid.UUID, digest: bytes) -> bytes:
+    def _seal(self, chunk: Chunk, node_id: uuid.UUID, digest: bytes, name: str) -> bytes:
         """Compress, encrypt, and prepend the self-describing header.
 
         Runs off the event loop: both the compressor and AES-GCM release the
@@ -267,6 +273,7 @@ class TransferEngine:
                 chunk_count=0,
                 plaintext_hash=digest,
                 plaintext_size=len(chunk.data),
+                name_hint=name,
             ),
         )
         return header + sealed

@@ -238,11 +238,11 @@ class Maintenance:
     def _recover_node(self, conn: sqlite3.Connection, header: ChunkHeader) -> None:
         """Recreate a placeholder node for a recovered chunk.
 
-        A chunk header names the node it belonged to, so the tree's shape is
-        partially recoverable. Names are not: they live only in the vault, so a
-        rebuilt node is given a name derived from its id and the user renames it
-        afterwards. Full fidelity comes from the encrypted vault backup, and
-        this path exists for when that is gone too.
+        The header carries the node's id and its name at upload time, so a
+        rescan restores both. Folder structure is not recoverable this way --
+        parents live only in the vault -- so recovered files land at the root
+        for the user to reorganise. Full fidelity comes from the encrypted
+        vault backup; this path exists for when that is gone too.
         """
         node_id = header.node_id
         now = datetime.now(UTC).isoformat()
@@ -252,7 +252,12 @@ class Maintenance:
         conn.execute(
             "INSERT INTO nodes (id, parent_id, name, kind, created_at, modified_at) "
             "VALUES (?, NULL, ?, 'file', ?, ?)",
-            (node_id, f"recovered-{uuid.UUID(bytes=node_id).hex[:12]}.bin", now, now),
+            (
+                node_id,
+                header.name_hint or f"recovered-{uuid.UUID(bytes=node_id).hex[:12]}.bin",
+                now,
+                now,
+            ),
         )
 
     async def _read_header(self, ref: BlobRef) -> ChunkHeader | None:
