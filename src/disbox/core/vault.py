@@ -14,6 +14,7 @@ shape but none of its contents.
 
 import json
 import sqlite3
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -57,6 +58,40 @@ class KeyMaterial:
     mk_check: bytes
 
 
+class _GuardedConnection:
+    """A connection whose transactions are serialised across threads.
+
+    Delegates everything to the real connection, but holds a lock for the whole
+    `with` block so two threads cannot interleave transactions on it.
+    """
+
+    def __init__(self, conn: sqlite3.Connection, lock: threading.RLock) -> None:
+        """Guard `conn` with `lock`."""
+        self._conn = conn
+        self._lock = lock
+
+    def __enter__(self) -> sqlite3.Connection:
+        """Take the lock, then open a transaction on the real connection."""
+        self._lock.acquire()
+        try:
+            self._conn.__enter__()
+        except BaseException:
+            self._lock.release()
+            raise
+        return self._conn
+
+    def __exit__(self, *exc: object) -> bool:
+        """Commit or roll back, then release the lock either way."""
+        try:
+            return bool(self._conn.__exit__(*exc))  # type: ignore[arg-type]
+        finally:
+            self._lock.release()
+
+    def __getattr__(self, name: str) -> object:
+        """Expose the rest of the connection API unchanged."""
+        return getattr(self._conn, name)
+
+
 class Vault:
     """An open vault. Hold it briefly; close it to release the writer lock.
 
@@ -71,6 +106,9 @@ class Vault:
         self.path = path
         self._conn: sqlite3.Connection | None = conn
         self._lock = lock
+        # Reentrant: nested `with vault.connection` on one thread is common,
+        # and a plain Lock would deadlock on the inner block.
+        self._db_lock = threading.RLock()
 
     # ---------------------------------------------------------------- open --
 
@@ -200,7 +238,12 @@ class Vault:
         lock = FileLock(path.with_suffix(path.suffix + ".lock")).acquire()
         conn: sqlite3.Connection | None = None
         try:
-            conn = sqlite3.connect(path, isolation_level="DEFERRED")
+            # check_same_thread=False because the GUI browses on the Qt thread
+            # while the transfer engine writes chunk metadata from the asyncio
+            # worker. Python's sqlite3 forbids that by default and it is the
+            # caller's job to serialise instead, which `transaction` does -- so
+            # this is only safe in combination with that lock.
+            conn = sqlite3.connect(path, isolation_level="DEFERRED", check_same_thread=False)
             _apply_pragmas(conn)
             # SPEC.md V5: refuse to write to a damaged vault. Checked before
             # migrating, since migrating damaged pages only spreads the harm.
@@ -222,7 +265,29 @@ class Vault:
 
     @property
     def connection(self) -> sqlite3.Connection:
-        """The underlying connection.
+        """The underlying connection, guarded so transactions cannot interleave.
+
+        Used as `with vault.connection as conn:`. The returned object holds a
+        lock for the duration of the block, which is what makes a single
+        connection safe to share between the GUI thread and the transfer
+        worker: two threads issuing BEGIN inside one another's transaction on
+        the same connection would otherwise commit each other's half-finished
+        work.
+
+        Raises:
+            VaultError: If the vault has been closed.
+        """
+        if self._conn is None:
+            msg = f"vault at {self.path} is closed"
+            raise VaultError(msg)
+        return _GuardedConnection(self._conn, self._db_lock)  # type: ignore[return-value]
+
+    @property
+    def raw_connection(self) -> sqlite3.Connection:
+        """The connection without the transaction guard.
+
+        For reads that do not need a transaction. Callers taking this on a
+        thread other than the one that opened the vault must not write.
 
         Raises:
             VaultError: If the vault has been closed.

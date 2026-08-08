@@ -116,7 +116,8 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-4 | Main window shell, breadcrumb, status bar | ✅ |
 | M8-8 | Search wired to FTS5 | ✅ |
 | M8-1 | Qt ⇄ asyncio bridge | ✅ asyncio loop on a `QThread`, results as queued signals |
-| M8-6 | Create / rename / delete wired, context menu, shortcuts | 🟡 Upload and download await the engine |
+| M8-6 | Create / rename / delete, upload, download wired | ✅ Folder download awaits M8-7's tree walk |
+| M8-5 | Transfer progress signals | 🟡 Signals exist; the dock UI is not built |
 | M8-3 | Folder tree pane | ⚪ Next |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 

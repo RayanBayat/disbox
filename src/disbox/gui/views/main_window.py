@@ -21,10 +21,11 @@ stubbing Qt out from under it.
 """
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -45,11 +46,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from disbox.core.engine import TransferEngine
 from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
-from disbox.gui.bridge import AsyncBridge
+from disbox.gui.bridge import AsyncBridge, AsyncTask, Work
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.backdrop import (
@@ -74,10 +76,20 @@ _ICON_BUTTON: Final = 30
 # mypy flags nativeEvent as conflicting across the two bases; the mixin's
 # signature matches what Qt actually calls, and the runtime override works.
 class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
-    """Browse a vault: navigate directories, search, and inspect."""
+    """Browse a vault: navigate directories, search, transfer, and inspect."""
+
+    #: (completed, total) bytes for the transfer currently running.
+    transfer_progress = Signal(int, int)
+    #: Emitted when the transfer queue empties, successfully or not.
+    transfers_idle = Signal()
 
     def __init__(
-        self, vault: Vault, palette: Palette = DARK, *, bridge: AsyncBridge | None = None
+        self,
+        vault: Vault,
+        palette: Palette = DARK,
+        *,
+        bridge: AsyncBridge | None = None,
+        engine: TransferEngine | None = None,
     ) -> None:
         """Open a window onto `vault`, showing its root directory.
 
@@ -86,10 +98,16 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             palette: Starting theme.
             bridge: Where asynchronous work is submitted. Optional so tests and
                 read-only use need not start a thread they will not use.
+            engine: Moves file contents. Without one the window still browses,
+                and transfer actions report that storage is not configured
+                rather than failing at the point of use.
         """
         super().__init__()
         self._vault = vault
         self._bridge = bridge
+        self._engine = engine
+        self._queue: list[Path] = []
+        self._transferring = False
         self._palette = palette
         self._directory: uuid.UUID | None = None
         self._history: list[uuid.UUID | None] = []
@@ -574,6 +592,111 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._status.setText(f"{count} item{'' if count == 1 else 's'}")
         self._up_button.setEnabled(self._directory is not None)
         self._back_button.setEnabled(bool(self._history))
+
+    # ---------------------------------------------------------- transfers --
+
+    def upload_files(self, sources: Sequence[Path]) -> None:
+        """Upload `sources` into the open directory, one after another.
+
+        Serial rather than concurrent: the engine already parallelises the
+        chunks within a file, and a second file competing for the same rate
+        limit buys nothing while making progress harder to read.
+        """
+        if not sources:
+            return
+        if self._engine is None:
+            self._report("Storage is not configured, so uploads are unavailable")
+            return
+
+        self._queue.extend(sources)
+        if not self._transferring:
+            self._start_next_upload()
+
+    def _start_next_upload(self) -> None:
+        """Take the next queued file, or announce that the queue is empty."""
+        if self._bridge is None or self._engine is None:
+            return
+        if not self._queue:
+            self._transferring = False
+            self._refresh()
+            self.transfers_idle.emit()
+            return
+
+        source = self._queue.pop(0)
+        self._transferring = True
+        engine, directory = self._engine, self._directory
+
+        async def work(task: AsyncTask) -> str:
+            # Opened before the node is created: creating it first leaves an
+            # empty node behind for a file that turned out to be unreadable,
+            # and the user sees a phantom entry for something never uploaded.
+            with source.open("rb") as handle:
+                filesystem = FileSystem(self._vault)
+                name = filesystem.available_name(directory, source.name, NameCollision.KEEP_BOTH)
+                node_id = filesystem.create_file(directory, name)
+                await engine.upload(
+                    node_id,
+                    handle,
+                    on_progress=lambda p: task.report_progress(p.completed_bytes, p.total_bytes),
+                )
+            return name
+
+        self._run_transfer(work, f"Uploading {source.name}")
+
+    def download_selected(self, destination: Path) -> None:
+        """Write every selected file into `destination`."""
+        nodes = self.selected_nodes
+        if not nodes:
+            return
+        if self._engine is None:
+            self._report("Storage is not configured, so downloads are unavailable")
+            return
+
+        engine = self._engine
+
+        async def work(task: AsyncTask) -> str:
+            filesystem = FileSystem(self._vault)
+            for node_id in nodes:
+                node = filesystem.resolve(node_id)
+                if node.kind != "file":
+                    continue  # folders need a tree walk, which is M8-7
+                with (destination / node.name).open("wb") as handle:
+                    await engine.download(
+                        node_id,
+                        handle,
+                        on_progress=lambda p: task.report_progress(
+                            p.completed_bytes, p.total_bytes
+                        ),
+                    )
+            return str(destination)
+
+        self._run_transfer(work, f"Downloading to {destination.name}")
+
+    def _run_transfer(self, work: Work, label: str) -> None:
+        """Submit `work`, forward its progress, and move the queue along."""
+        if self._bridge is None:
+            self._report("Transfers are unavailable in this window")
+            return
+
+        self._report(label)
+        task = self._bridge.submit(work)
+        task.progress.connect(self.transfer_progress.emit)
+        task.finished.connect(lambda _: self._on_transfer_done())
+        task.failed.connect(self._on_transfer_failed)
+        task.cancelled.connect(self._on_transfer_done)
+
+    def _on_transfer_done(self) -> None:
+        """One transfer ended; continue with whatever is queued."""
+        self._refresh()
+        self._start_next_upload()
+
+    def _on_transfer_failed(self, message: str) -> None:
+        """Report a failed transfer and carry on with the rest of the queue.
+
+        One unreadable file must not abandon the others the user selected.
+        """
+        self._report(message)
+        self._start_next_upload()
 
     # ------------------------------------------------------- file operations --
 

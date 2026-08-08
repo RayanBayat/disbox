@@ -85,7 +85,16 @@ class LocalBackend:
         await asyncio.to_thread(staging.write_bytes, data)
         # replace is atomic, so whichever racer lands last wins with identical
         # content; the others simply have their staging file consumed.
-        await asyncio.to_thread(staging.replace, target)
+        try:
+            await asyncio.to_thread(staging.replace, target)
+        except OSError:
+            # Windows refuses the replace outright while another racer holds the
+            # target open, which POSIX allows. Convergent encryption means every
+            # racer is writing byte-identical content, so a target that already
+            # exists is the same blob and this staging copy is simply redundant.
+            if not target.exists():
+                raise
+            await asyncio.to_thread(staging.unlink, True)
 
         self._index[idempotency_key] = locator
         self._save_index()
