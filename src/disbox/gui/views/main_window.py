@@ -30,6 +30,7 @@ from PySide6.QtGui import QAction, QDrag, QDragEnterEvent, QDropEvent, QKeySeque
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -193,6 +194,17 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         return button
 
+    def _build_action_buttons(self) -> None:
+        """The transfer actions, which must be visible rather than guessed at."""
+        self._upload_button = self._icon_button("upload", "Upload files (Ctrl+U)")
+        self._upload_button.clicked.connect(self.prompt_upload)
+
+        self._download_button = self._icon_button("download", "Download selection (Ctrl+D)")
+        self._download_button.clicked.connect(self.prompt_download)
+
+        self._new_folder_button = self._icon_button("folder", "New folder (Ctrl+Shift+N)")
+        self._new_folder_button.clicked.connect(self.prompt_new_folder)
+
     def _build_sidebar(self) -> QWidget:
         """Places, and the vault's identity."""
         sidebar = QWidget()
@@ -300,6 +312,8 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         self._theme_button = self._icon_button("contrast", "Switch theme")
         self._theme_button.clicked.connect(self.toggle_theme)
+        self._build_action_buttons()
+
         self._notices_button = self._icon_button("info", "Notifications")
         self._notices_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._notices_button.clicked.connect(self.open_notifications)
@@ -320,6 +334,17 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         layout.addWidget(self._crumb_bar)
         layout.addStretch(1)
 
+        layout.addWidget(self._build_search())
+        layout.addWidget(self._upload_button)
+        layout.addWidget(self._download_button)
+        layout.addWidget(self._new_folder_button)
+        layout.addWidget(self._notices_button)
+        layout.addWidget(self._theme_button)
+        layout.addWidget(self._settings_button)
+        return header
+
+    def _build_search(self) -> QWidget:
+        """The search field, with its glyph sitting inside the pill."""
         search_wrap = QWidget()
         # Not a fixed width: the details pane takes 288px off this row when it
         # opens, and a header that cannot shrink simply overflows and gets
@@ -344,11 +369,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         glyph.move(12, 11)
         glyph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        layout.addWidget(search_wrap)
-        layout.addWidget(self._notices_button)
-        layout.addWidget(self._theme_button)
-        layout.addWidget(self._settings_button)
-        return header
+        return search_wrap
 
     def _build_table(self) -> QTableView:
         """The file list."""
@@ -471,6 +492,8 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             (QKeySequence("Alt+Up"), self.navigate_up),
             (QKeySequence.StandardKey.Find, self._search_box.setFocus),
             (QKeySequence("Ctrl+Shift+N"), self.prompt_new_folder),
+            (QKeySequence("Ctrl+D"), self.prompt_download),
+            (QKeySequence("Ctrl+U"), self.prompt_upload),
             (QKeySequence("F2"), self.prompt_rename),
             (QKeySequence("Alt+Return"), self.show_properties),
             (QKeySequence.StandardKey.Undo, self.undo_last_change),
@@ -526,6 +549,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         menu = QMenu(self)
         selection = self.selected_nodes
 
+        if selection:
+            label = "Download" if len(selection) == 1 else f"Download {len(selection)} items"
+            menu.addAction(label, self.prompt_download).setShortcut(QKeySequence("Ctrl+D"))
+            menu.addSeparator()
         if len(selection) == 1:
             menu.addAction("Rename", self.prompt_rename).setShortcut(QKeySequence("F2"))
         if selection:
@@ -585,6 +612,28 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         """Re-read everything that reflects the tree."""
         self._refresh()
         self.tree.reload()
+
+    def prompt_download(self) -> None:
+        """Ask where to save the selection, then download it."""
+        if not self.selected_nodes:
+            self._report("Select something to download first")
+            return
+
+        destination = QFileDialog.getExistingDirectory(self, "Save to folder", str(Path.home()))
+        if destination:
+            self.download_selected(Path(destination))
+
+    def prompt_upload(self) -> None:
+        """Ask which files to upload into the open folder."""
+        chosen, _ = QFileDialog.getOpenFileNames(self, "Upload files", str(Path.home()))
+        if chosen:
+            self.upload_files([Path(item) for item in chosen])
+
+    def prompt_upload_folder(self) -> None:
+        """Ask which folder to upload into the open folder."""
+        chosen = QFileDialog.getExistingDirectory(self, "Upload folder", str(Path.home()))
+        if chosen:
+            self.upload_files([Path(chosen)])
 
     def prompt_new_folder(self) -> None:
         """Ask for a folder name, then create it."""
