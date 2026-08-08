@@ -130,17 +130,25 @@ jobs:
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           Write-Output "GUI launched"
 
+      # Never blocks the release. The installer script has not been compiled
+      # anywhere yet, so its first real run is here; a release that already
+      # round-tripped a vault through its own binaries should not be thrown
+      # away because an untested .iss needs a correction.
       - name: Compile the installer
         shell: pwsh
+        continue-on-error: true
         run: |
           $iscc = "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"
-          if (Test-Path $iscc) {
-            & $iscc packaging/disbox.iss
-          } else {
-            # Inno Setup ships with the Windows runners, but the release must
-            # not be blocked on a path that has never been verified.
-            Write-Warning "Inno Setup not found; publishing the bundle only"
+          if (-not (Test-Path $iscc)) {
+            Write-Warning "Inno Setup not on this runner; publishing the bundle only"
+            exit 0
           }
+          & $iscc packaging/disbox.iss
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "the installer script failed to compile; publishing the bundle only"
+            exit 0
+          }
+          Write-Output "installer built"
 
       - name: Package the bundle
         shell: pwsh
