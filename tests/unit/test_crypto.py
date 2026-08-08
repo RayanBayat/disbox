@@ -6,12 +6,14 @@ under a key nobody can reproduce, or worse, ciphertext that only looks encrypted
 
 import pytest
 
+from disbox.core.chunker import hash_chunk
 from disbox.core.crypto import (
     CHUNK_HEADER_MAGIC,
     ChunkHeader,
     KdfParams,
     calibrate_kdf,
     decode_chunk_header,
+    derive_chunk_key,
     derive_file_key,
     derive_kek,
     encode_chunk_header,
@@ -120,16 +122,26 @@ class TestChunkEncryption:
         plaintext = b"SENSITIVE-MARKER-VALUE" * 8
         assert plaintext not in seal_chunk(key, 0, plaintext)
 
-    def test_each_index_produces_different_ciphertext(self, master_key: bytes) -> None:
-        """Identical chunks at different offsets must not look identical."""
-        key = derive_file_key(master_key, b"node")
-        assert seal_chunk(key, 0, b"same") != seal_chunk(key, 1, b"same")
+    def test_identical_content_seals_identically(self, master_key: bytes) -> None:
+        """Convergent encryption: this is what makes deduplication possible.
 
-    def test_opening_with_the_wrong_index_fails(self, master_key: bytes) -> None:
-        key = derive_file_key(master_key, b"node")
-        sealed = seal_chunk(key, 0, b"payload")
-        with pytest.raises(CryptoError):
-            open_chunk(key, 1, sealed)
+        Per-file, per-index nonces would be stronger in isolation, but they make
+        a shared chunk unreadable by every file except the one that wrote it.
+        The trade is deliberate and documented in `derive_chunk_key`.
+        """
+        key = derive_chunk_key(master_key, hash_chunk(b"same"))
+        assert seal_chunk(key, 0, b"same") == seal_chunk(key, 7, b"same")
+
+    def test_different_content_seals_differently(self, master_key: bytes) -> None:
+        first = derive_chunk_key(master_key, hash_chunk(b"one"))
+        second = derive_chunk_key(master_key, hash_chunk(b"two"))
+        assert seal_chunk(first, 0, b"one") != seal_chunk(second, 0, b"two")
+
+    def test_a_different_vault_seals_the_same_content_differently(self, master_key: bytes) -> None:
+        """Vault-scoped keys stop anyone correlating content across vaults."""
+        mine = derive_chunk_key(master_key, hash_chunk(b"same"))
+        theirs = derive_chunk_key(generate_master_key(), hash_chunk(b"same"))
+        assert seal_chunk(mine, 0, b"same") != seal_chunk(theirs, 0, b"same")
 
     def test_opening_with_the_wrong_key_fails(self, master_key: bytes) -> None:
         sealed = seal_chunk(derive_file_key(master_key, b"a"), 0, b"payload")

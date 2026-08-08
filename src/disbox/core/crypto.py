@@ -49,6 +49,7 @@ __all__ = [
     "WrappedKey",
     "calibrate_kdf",
     "decode_chunk_header",
+    "derive_chunk_key",
     "derive_file_key",
     "derive_kek",
     "encode_chunk_header",
@@ -68,6 +69,7 @@ CHUNK_HEADER_VERSION: Final = 1
 
 # Domain separators, so two derivations from the same key can never collide.
 _INFO_FILE_KEY: Final = b"disbox/file-key/v1"
+_INFO_CHUNK_KEY: Final = b"disbox/chunk-key/v1"
 _INFO_NONCE: Final = b"disbox/chunk-nonce/v1"
 _INFO_HEADER: Final = b"disbox/chunk-header/v1"
 _INFO_CHECK: Final = b"disbox/passphrase-check/v1"
@@ -192,6 +194,27 @@ def derive_file_key(master_key: bytes, node_id: bytes) -> bytes:
     return _hkdf(master_key, _INFO_FILE_KEY + node_id)
 
 
+def derive_chunk_key(master_key: bytes, plaintext_hash: bytes) -> bytes:
+    """Derive a chunk's key from its own contents (convergent encryption).
+
+    Deduplication and per-file keys are mutually exclusive: a chunk shared by
+    two files would be sealed under one file's key and unreadable by the other,
+    and the same breaks within a single file when repeated content deduplicates
+    to a different index. Keying on the content instead makes identical
+    plaintext produce identical ciphertext, which is exactly what dedup needs.
+
+    The master key is mixed in, so the mapping is unique to this vault: two
+    vaults storing the same file produce different ciphertext, and nobody
+    without the master key can test whether a given file is present.
+
+    The residual property to be aware of is that someone *holding* the master
+    key can confirm whether a specific known plaintext is stored. That is the
+    accepted cost of deduplicating encrypted data, and it is why the derivation
+    is vault-scoped rather than global.
+    """
+    return _hkdf(master_key, _INFO_CHUNK_KEY + plaintext_hash)
+
+
 def _chunk_nonce(file_key: bytes, chunk_index: int) -> bytes:
     """Derive the nonce for one chunk. Never random; see the module docstring."""
     return _hkdf(file_key, _INFO_NONCE + chunk_index.to_bytes(8, "big"), NONCE_SIZE)
@@ -248,26 +271,37 @@ def unwrap_master_key(wrapped: WrappedKey, passphrase: str) -> bytes:
         raise CryptoError(msg) from exc
 
 
-def seal_chunk(file_key: bytes, chunk_index: int, plaintext: bytes) -> bytes:
+def seal_chunk(chunk_key: bytes, chunk_index: int, plaintext: bytes) -> bytes:
     """Encrypt one chunk.
 
+    A fixed nonce is correct here precisely because the key is derived from the
+    content: a repeated (key, nonce) pair can only occur for identical
+    plaintext, where producing identical ciphertext is the intended behaviour
+    rather than a leak.
+
     Args:
-        file_key: Key from `derive_file_key`.
-        chunk_index: Position of this chunk within its file.
+        chunk_key: Key from `derive_chunk_key`.
+        chunk_index: Retained for API symmetry and future re-keying.
         plaintext: Data to protect.
 
     Returns:
         Ciphertext with its authentication tag appended.
     """
-    return AESGCM(file_key).encrypt(_chunk_nonce(file_key, chunk_index), plaintext, None)
+    del chunk_index
+    return AESGCM(chunk_key).encrypt(_convergent_nonce(chunk_key), plaintext, None)
 
 
-def open_chunk(file_key: bytes, chunk_index: int, ciphertext: bytes) -> bytes:
+def _convergent_nonce(chunk_key: bytes) -> bytes:
+    """Derive the nonce from the chunk key, so identical content seals alike."""
+    return _hkdf(chunk_key, _INFO_NONCE, NONCE_SIZE)
+
+
+def open_chunk(chunk_key: bytes, chunk_index: int, ciphertext: bytes) -> bytes:
     """Decrypt one chunk, verifying it first.
 
     Args:
-        file_key: Key from `derive_file_key`.
-        chunk_index: Position this chunk is expected to occupy.
+        chunk_key: Key from `derive_chunk_key`.
+        chunk_index: Retained for API symmetry; the nonce no longer uses it.
         ciphertext: Sealed data.
 
     Returns:
@@ -279,10 +313,11 @@ def open_chunk(file_key: bytes, chunk_index: int, ciphertext: bytes) -> bytes:
             those cases by design, and all of them mean the same thing: do not
             use this data.
     """
+    del chunk_index
     try:
-        return AESGCM(file_key).decrypt(_chunk_nonce(file_key, chunk_index), ciphertext, None)
+        return AESGCM(chunk_key).decrypt(_convergent_nonce(chunk_key), ciphertext, None)
     except InvalidTag as exc:
-        msg = f"chunk {chunk_index} failed authentication; it is damaged or not ours"
+        msg = "chunk failed authentication; it is damaged or not ours"
         raise CryptoError(msg) from exc
 
 

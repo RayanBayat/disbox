@@ -26,5 +26,9 @@ class CryptoError(DisboxError):
     """A key could not be derived, or data failed to decrypt or authenticate."""
 
 
+class TransferError(DisboxError):
+    """A file could not be uploaded or reassembled."""
+
+
 class IntegrityError(VaultError):
     """The vault failed an internal consistency check."""

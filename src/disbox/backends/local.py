@@ -12,6 +12,7 @@ the network too, but found in milliseconds instead of seconds.
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Final
@@ -39,6 +40,11 @@ class LocalBackend:
         self._root.mkdir(parents=True, exist_ok=True)
         self._index_path = self._root / _INDEX_NAME
         self._index: dict[str, str] = self._load_index()
+
+    @property
+    def root(self) -> Path:
+        """Directory holding the blobs."""
+        return self._root
 
     @property
     def name(self) -> str:
@@ -69,8 +75,16 @@ class LocalBackend:
         target = self._root / locator
         # Write beside the target and rename, so a crash mid-write cannot leave
         # a truncated blob that looks complete.
-        staging = target.with_suffix(".partial")
+        #
+        # The staging name carries a unique suffix because concurrent puts of
+        # the *same* key are expected: convergent encryption makes identical
+        # content produce an identical idempotency key, so two in-flight chunks
+        # routinely race here. A shared staging path let them interleave their
+        # writes and produce a corrupt blob.
+        staging = target.with_suffix(f".{uuid.uuid4().hex}.partial")
         await asyncio.to_thread(staging.write_bytes, data)
+        # replace is atomic, so whichever racer lands last wins with identical
+        # content; the others simply have their staging file consumed.
         await asyncio.to_thread(staging.replace, target)
 
         self._index[idempotency_key] = locator
