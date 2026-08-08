@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from disbox.config import load_settings
 from disbox.core.engine import TransferEngine
 from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
@@ -66,6 +67,7 @@ from disbox.gui.views.details_pane import DetailsPane
 from disbox.gui.views.folder_tree import FolderTree
 from disbox.gui.views.properties_dialog import PropertiesDialog
 from disbox.gui.views.row_delegate import AnimatedRowDelegate
+from disbox.gui.views.settings_dialog import SettingsDialog
 from disbox.gui.views.transfer_dock import TransferDock
 from disbox.gui.views.trash_dialog import TrashDialog
 
@@ -284,8 +286,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         layout.setContentsMargins(Space.MD, Space.SM, Space.LG, Space.SM)
         layout.setSpacing(Space.XS)
 
-        self._theme_button = self._icon_button("settings", "Switch theme")
+        self._theme_button = self._icon_button("contrast", "Switch theme")
         self._theme_button.clicked.connect(self.toggle_theme)
+        self._settings_button = self._icon_button("settings", "Settings")
+        self._settings_button.clicked.connect(self.open_settings)
 
         self._back_button = self._icon_button("arrow-left", "Back")
         self._back_button.clicked.connect(self.navigate_back)
@@ -326,6 +330,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         layout.addWidget(search_wrap)
         layout.addWidget(self._theme_button)
+        layout.addWidget(self._settings_button)
         return header
 
     def _build_table(self) -> QTableView:
@@ -482,6 +487,16 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         if len(nodes) != 1:
             return
         PropertiesDialog(self._vault, nodes[0], self._palette, self).exec()
+
+    def open_settings(self) -> None:
+        """Edit the storage configuration.
+
+        Changes land in the env file and take effect the next time the app
+        starts, since the backend and engine are built once at startup.
+        """
+        dialog = SettingsDialog(load_settings(), self._palette, env_path=Path(".env"), parent=self)
+        if dialog.exec():
+            self._report("Settings saved. Restart Disbox for them to take effect.")
 
     def open_trash(self) -> None:
         """Show the trash, refreshing this window if anything is restored."""

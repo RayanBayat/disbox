@@ -574,7 +574,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 - [x] **M8-6** All §6.3 filesystem operations wired, with the collision-policy dialog.
 - [ ] **M8-7** Drag-and-drop in from Explorer, and out to Explorer with deferred rendering.
 - [x] **M8-8** Search bar: debounced FTS5, `ext:`/`size>`/`before:` filters (U4).
-- [ ] **M8-9** Trash view, Properties dialog, Settings dialog.
+- [x] **M8-9** Trash view, Properties dialog, Settings dialog.
 - [ ] **M8-10** Setup wizard + unlock screen + vault picker.
 - [ ] **M8-11** Undo stack over the journal.
 - [ ] **M8-12** Error/notification center with copyable diagnostic IDs; zero blocking modals for errors.

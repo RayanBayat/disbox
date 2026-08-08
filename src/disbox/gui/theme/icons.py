@@ -64,6 +64,7 @@ _PATHS: Final[dict[str, str]] = {
     "refresh": "M20 11A8 8 0 006.3 6.3L3 9M4 13a8 8 0 0013.7 4.7L21 15M21 5v4h-4M3 19v-4h4",
     "info": "M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5M12 8h.01",
     "shield": "M12 3l8 3v6c0 4.4-3.4 7.9-8 9-4.6-1.1-8-4.6-8-9V6l8-3z",
+    "contrast": "M12 3a9 9 0 100 18 9 9 0 000-18zm0 2v14a7 7 0 000-14z",
 }
 
 ICON_NAMES: Final = frozenset(_PATHS)
