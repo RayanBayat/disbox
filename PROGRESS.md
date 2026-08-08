@@ -17,13 +17,13 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M2** | Crypto (Argon2id, AES-GCM, headers) | ✅ Complete | 6 / 7 * |
 | **M3** | Chunking & manifest (FastCDC, Merkle) | 🟡 In progress | 4 / 5 |
 | **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
-| **M5** | Discord backend | 🟡 Core done | 8 / 10 |
+| **M5** | Discord backend | ✅ Complete | 10 / 10 |
 | **M6** | Transfer engine | 🟡 Core done | 4 / 7 |
 | **M7** | Filesystem & maintenance | 🟡 In progress | 2 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **49 / 81** |
+| | **Total** | | **51 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 357 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 357 passed + 13 scale guards (`-m slow`) + 5 live (`-m live`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -168,7 +168,7 @@ Disbox now stores and retrieves real encrypted files end to end.
 | Rate-limit buckets, bounded retry, idempotent upload | ✅ |
 | Runtime probing of the attachment size limit | ✅ |
 | Resume / cancel (M6-2, M6-5) | ⚪ |
-| Live smoke test against a real channel (M5-10) | ⚪ Needs a token |
+| Live smoke test against a real channel (M5-10) | ✅ Verified against `#storage` |
 
 ### Design decision: convergent encryption
 
@@ -237,6 +237,8 @@ uv run ruff format .         # format
 - **`filterwarnings = ["error"]`** in pytest: any warning fails the suite. Deliberate — it caught a deprecated `argon2.__version__` access during M0-1.
 - **Line endings** normalized to LF via `.gitattributes`; Windows scripts keep CRLF.
 - Vault files (`*.dbx`) and `snapshots/` are gitignored — they hold wrapped keys.
+- **Credentials live in `.env`** (gitignored, untracked, never committed) and load as `SecretStr`.
+- **`pytest` excludes both `slow` and `live` by default.** Run them with `-m slow` / `-m live`.
 - **`sqlite3.connect()` in a `with` block does not close the connection.** Use `contextlib.closing`.
 - **Naming a method `list` shadows the builtin inside the class body**, so a `-> list[X]` annotation on a sibling method resolves to the method. Caught by mypy.
 - **Qt's `offscreen` platform renders no glyphs** — screenshots come out as tofu boxes. Use `QT_QPA_PLATFORM=windows` for any visual check; `offscreen` is still right for tests.
