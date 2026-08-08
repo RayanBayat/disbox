@@ -204,6 +204,8 @@ Recorded rather than glossed, each asserted by a test:
 | `c3edebb` | chore: normalize line endings via gitattributes |
 | `be58740` | chore: import legacy web client |
 | `019426d` | docs: add legacy analysis and v2 specification |
+| `5b49be9` | fix(gui): stop panels and rows rendering as separate pieces |
+| `e0be541` | fix(gui): use Fusion so the native style stops repainting rows |
 | `bf6c141` | chore: remove legacy web client |
 | `b937419` | chore: scaffold python project with uv, ruff, mypy, and pytest |
 | `042588a` | docs: record python 3.14 compatibility and threading benchmarks |
@@ -243,6 +245,41 @@ uv run ruff format .         # format
 ---
 
 ## Notes and gotchas
+
+### Qt paints from three places, not one
+
+Row rendering had three independent owners fighting each other, and each had
+to be found separately:
+
+1. **The stylesheet.** `QTableView::item` rules are applied *per cell* and
+   re-derive `:selected` from the index, so a rule there can never span a row.
+   It drew a rounded pill inside every cell.
+2. **The delegate.** Also per cell, and Qt clips painting to the cell, so a
+   row-wide shape needs interior cells widened by the corner radius *and*
+   clipped, or the semi-transparent fill double-paints at the overlap.
+3. **The native style.** Qt's Windows 11 style draws a Fluent accent bar 3px
+   inside every selected cell's leading edge. Nothing in the application can
+   suppress it -- not state flags, not the Highlight palette role, not even
+   skipping the delegate's `super().paint()`. The app runs under **Fusion** for
+   this reason; do not change it back.
+
+### A plain QWidget ignores its stylesheet background
+
+`QWidget` subclasses do not draw a stylesheet `background` unless
+`WA_StyledBackground` is set. The details pane looked translucent because its
+background was never painted at all. Any new panel needs that attribute.
+
+### Verifying anything glass-related
+
+`QWidget.grab()` cannot capture Mica -- the compositor draws it *behind* the
+window, so a grab shows surfaces with nothing behind them. Use
+`docs/scripts/capture_window.py`, which uses `PrintWindow` with
+`PW_RENDERFULLCONTENT`. It sets the Fusion style to match the real entry point;
+a capture under a different style is not showing the shipped application.
+
+Row highlighting is **animated**, so a capture taken immediately after
+selecting shows the fill at zero. Let it settle for a frame before capturing or
+it reads as a regression that is not there.
 
 - **`QAbstractTableModel` is abstract** and must be subclassed — relevant to M8-2.
 - **Ruff formats Python inside markdown fences.** Excluded via `extend-exclude = ["*.md"]`.
