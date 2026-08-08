@@ -42,6 +42,7 @@ dev = [
     "mypy>=2.3",
     "ruff>=0.16",
     "pytest-qt>=4.5.0",
+    "pytest-asyncio>=1.4.0",
 ]
 
 [build-system] # PEP 517/518
@@ -130,6 +131,7 @@ addopts = "-ra --strict-markers --strict-config --showlocals -m 'not slow'"
 testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = ["error"]
+asyncio_mode = "auto"
 markers = [
     "slow: large-scale performance guards; excluded by default",
     "live: hits a real external service; never runs in CI",
