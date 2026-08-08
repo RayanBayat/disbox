@@ -141,6 +141,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         """Places, and the vault's identity."""
         sidebar = QWidget()
         sidebar.setObjectName("Sidebar")
+        sidebar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         sidebar.setFixedWidth(_SIDEBAR_WIDTH)
 
         layout = QVBoxLayout(sidebar)
@@ -219,6 +220,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         """Navigation, breadcrumb, and search."""
         header = QWidget()
         header.setObjectName("HeaderBar")
+        header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         header.setFixedHeight(56)
 
         layout = QHBoxLayout(header)
@@ -243,7 +245,12 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         layout.addStretch(1)
 
         search_wrap = QWidget()
-        search_wrap.setFixedWidth(300)
+        # Not a fixed width: the details pane takes 288px off this row when it
+        # opens, and a header that cannot shrink simply overflows and gets
+        # painted over by the pane.
+        search_wrap.setMinimumWidth(168)
+        search_wrap.setMaximumWidth(300)
+        search_wrap.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         wrap_layout = QHBoxLayout(search_wrap)
         wrap_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -327,6 +334,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         """Assemble sidebar, header, content, and status strip."""
         root = QWidget()
         root.setObjectName("Root")
+        root.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -342,6 +350,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         content = QWidget()
         content.setObjectName("Content")
+        content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
@@ -508,10 +517,31 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
     def _on_selection_changed(self) -> None:
         """Describe the selection, but only when it is unambiguous."""
         rows = {index.row() for index in self._table.selectionModel().selectedRows()}
+        was_visible = self.details.isVisible()
         if len(rows) != 1:
             self.details.show_node(None)
-            return
-        self.details.show_node(self.table_model.node_id_at(next(iter(rows))))
+        else:
+            self.details.show_node(self.table_model.node_id_at(next(iter(rows))))
+
+        if self.details.isVisible() != was_visible:
+            # Showing or hiding the pane resizes everything to its left. A
+            # translucent window does not clear the area a widget vacates, so
+            # without an explicit repaint the previous layout stays on screen
+            # underneath -- which is why the header appeared twice.
+            self._repaint_all()
+
+    def _repaint_all(self) -> None:
+        """Force a clean repaint after a layout change.
+
+        Needed only because the window is translucent: Qt leaves whatever was
+        painted before in place, and a compositor material behind it means
+        there is no opaque fill to hide the remains.
+        """
+        central = self.centralWidget()
+        if central is not None:
+            central.updateGeometry()
+            central.update()
+        self.update()
 
     def _on_sort_changed(self, column: int, order: Qt.SortOrder) -> None:
         """Re-read the directory in the requested order."""

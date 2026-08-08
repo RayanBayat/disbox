@@ -110,9 +110,24 @@ class AnimatedRowDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        # A delegate paints one cell at a time, so rounding every cell's rect
+        # draws the row as a string of separate pills with seams between them.
+        # Interior cells are widened by the corner radius instead: their
+        # rounded corners then fall outside the cell's own clip, and each rect
+        # overlaps its neighbour, leaving a single continuous shape.
+        # Clip to the true cell first: the widened rect below would otherwise
+        # spill into the neighbouring cell, and the fill is semi-transparent,
+        # so the overlap paints twice and shows as a bright band on every
+        # column boundary.
+        painter.setClipRect(option.rect)
+
         rect = QRectF(option.rect)
-        # Only the outer edges of the row are rounded, so a row reads as one
-        # continuous pill rather than a string of separate cells.
+        last_column = index.model().columnCount() - 1
+        if index.column() > 0:
+            rect.setLeft(rect.left() - Radius.SM)
+        if index.column() < last_column:
+            rect.setRight(rect.right() + Radius.SM)
+
         if selected > _EPSILON or hover > _EPSILON:
             colour = QColor(self._palette.accent if selected > hover else "#FFFFFF")
             strength = max(selected * 0.22, hover * 0.06)
@@ -128,5 +143,9 @@ class AnimatedRowDelegate(QStyledItemDelegate):
         self.initStyleOption(cell, index)
         cell.state &= ~QStyle.StateFlag.State_Selected
         cell.state &= ~QStyle.StateFlag.State_MouseOver
+        # The current-cell focus indicator draws a bar on one column's edge,
+        # which breaks the row into pieces again. Selection is already shown by
+        # the row fill.
+        cell.state &= ~QStyle.StateFlag.State_HasFocus
         cell.backgroundBrush = QBrush(Qt.BrushStyle.NoBrush)
         super().paint(painter, cell, index)

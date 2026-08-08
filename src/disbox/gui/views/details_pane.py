@@ -52,6 +52,11 @@ class DetailsPane(QWidget):
         self._node_id: uuid.UUID | None = None
 
         self.setObjectName("Details")
+        # A plain QWidget ignores a stylesheet background unless told to draw
+        # one. Without this the pane is fully transparent and the table behind
+        # it reads straight through, which is not a translucency effect but a
+        # missing paint.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(_PANE_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 

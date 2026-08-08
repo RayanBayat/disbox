@@ -14,12 +14,13 @@ from pathlib import Path
 
 os.environ["QT_QPA_PLATFORM"] = "windows"
 
-from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QImage
+from PySide6.QtWidgets import QApplication
 
-from disbox.core.vault import Vault  # noqa: E402
-from disbox.gui.theme.tokens import DARK  # noqa: E402
-from disbox.gui.views.main_window import MainWindow  # noqa: E402
+from disbox.core.vault import Vault
+from disbox.gui.theme.tokens import DARK
+from disbox.gui.views.main_window import MainWindow
 
 OUT = Path(__file__).parent
 PW_RENDERFULLCONTENT = 0x00000002
@@ -73,8 +74,6 @@ def capture(hwnd: int, path: Path) -> bool:
     buffer = ctypes.create_string_buffer(width * height * 4)
     gdi32.GetDIBits(memory_dc, bitmap, 0, height, buffer, ctypes.byref(header), 0)
 
-    from PySide6.QtGui import QImage
-
     image = QImage(bytes(buffer), width, height, QImage.Format.Format_RGB32)
     image.save(str(path))
 
@@ -85,6 +84,7 @@ def capture(hwnd: int, path: Path) -> bool:
 
 
 def main() -> None:
+    """Open the window and save a capture of it."""
     app = QApplication([])
     vault = Vault.open(Path("demo/my-files.dbx"))
     window = MainWindow(vault, DARK)

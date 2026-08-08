@@ -31,6 +31,8 @@ class Palette:
     window: str
     surface: str
     surface_raised: str
+    #: Interior panels. Nearly opaque so nothing behind them reads through.
+    panel: str
     surface_hover: str
     surface_active: str
 
@@ -73,6 +75,7 @@ DARK: Final = Palette(
     window="rgba(26, 24, 28, 0.74)",
     surface="rgba(35, 32, 38, 0.68)",
     surface_raised="rgba(45, 41, 49, 0.82)",
+    panel="rgba(32, 29, 34, 0.985)",
     surface_hover="rgba(255, 255, 255, 0.055)",
     surface_active="rgba(255, 255, 255, 0.085)",
     border="rgba(255, 255, 255, 0.075)",
@@ -103,6 +106,7 @@ LIGHT: Final = Palette(
     window="rgba(250, 248, 249, 0.82)",
     surface="rgba(255, 255, 255, 0.74)",
     surface_raised="rgba(255, 255, 255, 0.90)",
+    panel="rgba(252, 251, 252, 0.985)",
     surface_hover="rgba(0, 0, 0, 0.040)",
     surface_active="rgba(0, 0, 0, 0.065)",
     border="rgba(0, 0, 0, 0.075)",

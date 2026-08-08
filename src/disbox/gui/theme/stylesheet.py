@@ -33,8 +33,8 @@ def build_stylesheet(p: Palette, *, translucent: bool = True) -> str:
     ones that seemed to need it.
     """
     window_bg = p.window if translucent else _opaque(p.window)
-    surface = p.surface if translucent else _opaque(p.surface)
     raised = p.surface_raised if translucent else _opaque(p.surface_raised)
+    panel = p.panel if translucent else _opaque(p.panel)
     # Scrollbars deserve special mention: Qt's defaults are chunky and dated,
     # and a thin overlay bar is one of the clearest signals of a modern app.
     return f"""
@@ -84,7 +84,7 @@ QFrame#MeterFill {{
 }}
 
 QWidget#Sidebar {{
-    background: {surface};
+    background: {panel};
     border-right: 1px solid {p.border};
 }}
 
@@ -218,13 +218,16 @@ QTableView {{
     selection-background-color: {p.accent_subtle};
     selection-color: {p.text};
 }}
+/* Hover and selection backgrounds belong to AnimatedRowDelegate, which paints
+   them across the whole row. A rule here cannot: the stylesheet style is
+   applied per cell and re-derives :selected from the index, so it repaints a
+   rounded pill inside every cell and the row breaks into pieces with visible
+   seams at the column boundaries. Only geometry and text colour are set. */
 QTableView::item {{
     border: none;
-    border-radius: {Radius.SM}px;
     padding: 0px {Space.SM}px;
 }}
-QTableView::item:hover {{ background: {p.surface_hover}; }}
-QTableView::item:selected {{ background: {p.accent_subtle}; color: {p.text}; }}
+QTableView::item:selected {{ color: {p.text}; }}
 
 QHeaderView::section {{
     background: transparent;
@@ -246,7 +249,7 @@ QHeaderView::up-arrow, QHeaderView::down-arrow {{
 /* ---- Details pane ------------------------------------------------------ */
 
 QWidget#Details {{
-    background: {surface};
+    background: {panel};
     border-left: 1px solid {p.border};
 }}
 QLabel#DetailName {{

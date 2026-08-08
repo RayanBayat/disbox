@@ -61,6 +61,7 @@ class TitleBar(QWidget):
         self._window = window
         self._palette = palette
         self.setObjectName("TitleBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(_TITLE_BAR_HEIGHT)
 
         layout = QHBoxLayout(self)
