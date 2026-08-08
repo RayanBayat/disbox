@@ -10,24 +10,32 @@ The glass comes from the compositor via `theme.backdrop`, not from painted
 gradients. Surfaces are translucent so the material shows through, which is why
 nothing here sets an opaque background.
 
-Read-only for now. Upload, download, rename and delete arrive with the transfer
-engine; the toolbar deliberately offers no button that would do nothing.
+Create, rename and delete work against the vault directly. Upload and download
+still wait on the transfer engine being wired in; the toolbar deliberately
+offers no button that would do nothing.
+
+Operations are exposed as plain methods taking their arguments, with the dialogs
+as thin `prompt_*` wrappers. That split is what makes them testable -- a method
+that opens a modal to ask for a name cannot be driven from a test without
+stubbing Qt out from under it.
 """
 
 import uuid
 from collections.abc import Callable
 from typing import Final
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -37,8 +45,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
 from disbox.core.vault import Vault
+from disbox.errors import DisboxError
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
 from disbox.gui.theme.backdrop import (
@@ -381,11 +391,51 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             (QKeySequence.StandardKey.Back, self.navigate_back),
             (QKeySequence("Alt+Up"), self.navigate_up),
             (QKeySequence.StandardKey.Find, self._search_box.setFocus),
+            (QKeySequence("Ctrl+Shift+N"), self.prompt_new_folder),
+            (QKeySequence("F2"), self.prompt_rename),
+            (QKeySequence.StandardKey.Delete, self.delete_selected),
         ):
             action = QAction(self)
             action.setShortcut(sequence)
             action.triggered.connect(slot)
             self.addAction(action)
+
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._show_context_menu)
+
+    def _show_context_menu(self, position: QPoint) -> None:
+        """Offer the operations that apply to what is under the cursor."""
+        menu = QMenu(self)
+        selection = self.selected_nodes
+
+        if len(selection) == 1:
+            menu.addAction("Rename", self.prompt_rename).setShortcut(QKeySequence("F2"))
+        if selection:
+            label = "Delete" if len(selection) == 1 else f"Delete {len(selection)} items"
+            menu.addAction(label, self.delete_selected)
+            menu.addSeparator()
+        menu.addAction("New folder", self.prompt_new_folder).setShortcut(
+            QKeySequence("Ctrl+Shift+N")
+        )
+
+        menu.exec(self._table.viewport().mapToGlobal(position))
+
+    def prompt_new_folder(self) -> None:
+        """Ask for a folder name, then create it."""
+        name, accepted = QInputDialog.getText(self, "New folder", "Name:", text="New folder")
+        if accepted and name.strip():
+            self.create_folder(name.strip())
+
+    def prompt_rename(self) -> None:
+        """Ask for a new name for the single selected node."""
+        nodes = self.selected_nodes
+        if len(nodes) != 1:
+            return
+
+        current = FileSystem(self._vault).resolve(nodes[0]).name
+        name, accepted = QInputDialog.getText(self, "Rename", "Name:", text=current)
+        if accepted and name.strip() and name.strip() != current:
+            self.rename_selected(name.strip())
 
     def toggle_theme(self) -> None:
         """Switch between the dark and light palettes, live."""
@@ -513,6 +563,100 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._status.setText(f"{count} item{'' if count == 1 else 's'}")
         self._up_button.setEnabled(self._directory is not None)
         self._back_button.setEnabled(bool(self._history))
+
+    # ------------------------------------------------------- file operations --
+
+    @property
+    def selected_nodes(self) -> list[uuid.UUID]:
+        """The node ids of every selected row, in view order."""
+        rows = sorted({index.row() for index in self._table.selectionModel().selectedRows()})
+        return [
+            node_id
+            for node_id in (self.table_model.node_id_at(row) for row in rows)
+            if node_id is not None
+        ]
+
+    def create_folder(self, name: str = "New folder") -> uuid.UUID | None:
+        """Create a folder in the open directory and select it.
+
+        Args:
+            name: Desired name. A name already in use is given a numbered
+                suffix rather than rejected, since the user asked for a new
+                folder and refusing outright loses the gesture.
+
+        Returns:
+            The new folder's id, or None if it could not be created.
+        """
+        filesystem = FileSystem(self._vault)
+        free = filesystem.available_name(self._directory, name, NameCollision.KEEP_BOTH)
+        try:
+            node_id = filesystem.create_directory(self._directory, free)
+        except DisboxError as exc:
+            self._report(str(exc))
+            return None
+
+        self._refresh()
+        self._select_node(node_id)
+        return node_id
+
+    def rename_selected(self, new_name: str) -> None:
+        """Rename the single selected node.
+
+        A rename is only meaningful for one node, so a multiple selection is
+        ignored rather than applied to an arbitrary member of it.
+        """
+        nodes = self.selected_nodes
+        if len(nodes) != 1:
+            return
+
+        try:
+            FileSystem(self._vault).rename(nodes[0], new_name)
+        except DisboxError as exc:
+            self._report(str(exc))
+            return
+
+        self._refresh()
+        self._select_node(nodes[0])
+
+    def delete_selected(self) -> int:
+        """Move every selected node to the trash.
+
+        Returns:
+            How many nodes were affected, counting the contents of folders.
+        """
+        nodes = self.selected_nodes
+        if not nodes:
+            return 0
+
+        filesystem = FileSystem(self._vault)
+        affected = 0
+        try:
+            for node_id in nodes:
+                affected += filesystem.delete(node_id)
+        except DisboxError as exc:
+            self._report(str(exc))
+
+        self._refresh()
+        # The selection is gone, so the details pane must stop describing it.
+        self._table.clearSelection()
+        self._on_selection_changed()
+        return affected
+
+    def _select_node(self, node_id: uuid.UUID) -> None:
+        """Select `node_id` if it is in the current listing."""
+        for row in range(self.table_model.rowCount()):
+            if self.table_model.node_id_at(row) == node_id:
+                self._table.selectRow(row)
+                self._on_selection_changed()
+                return
+
+    def _report(self, message: str) -> None:
+        """Show a recoverable failure without interrupting the user.
+
+        A blocking modal for something the user can simply retry is the thing
+        SPEC M8-12 rules out, so this goes to the status bar.
+        """
+        self._status.setText(message)
 
     def _on_selection_changed(self) -> None:
         """Describe the selection, but only when it is unambiguous."""

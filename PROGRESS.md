@@ -116,6 +116,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-4 | Main window shell, breadcrumb, status bar | ✅ |
 | M8-8 | Search wired to FTS5 | ✅ |
 | M8-1 | Qt ⇄ asyncio bridge | ⏸ Deferred — nothing async exists until M6 |
+| M8-6 | Create / rename / delete wired, context menu, shortcuts | 🟡 Upload and download await the engine |
 | M8-3 | Folder tree pane | ⚪ Next |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
