@@ -21,7 +21,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
 
-from disbox.core import integrity, migrations
+from disbox.core import crypto, integrity, migrations
 from disbox.core.lock import FileLock
 from disbox.errors import VaultError
 
@@ -114,6 +114,53 @@ class Vault:
             path.unlink(missing_ok=True)
             raise
         return vault
+
+    @classmethod
+    def create_encrypted(
+        cls, path: Path, passphrase: str, params: crypto.KdfParams | None = None
+    ) -> Self:
+        """Create a vault whose contents can actually be protected.
+
+        Generates a master key, seals it under `passphrase`, and records only
+        the sealed form. The key itself is never written, so the file on disk
+        reveals the shape of the tree and none of its contents.
+
+        Args:
+            path: Destination file.
+            passphrase: Used to derive the key-encryption key.
+            params: Argon2id cost. Calibrated to this machine when omitted,
+                because a fixed constant is too weak on fast hardware and
+                unbearable on slow.
+
+        Returns:
+            The newly created, open vault.
+
+        Raises:
+            VaultError: If `path` already exists.
+        """
+        wrapped = crypto.wrap_master_key(
+            crypto.generate_master_key(), passphrase, params or crypto.calibrate_kdf()
+        )
+        return cls.create(path, _to_key_material(wrapped))
+
+    def unlock(self, passphrase: str) -> bytes:
+        """Recover this vault's master key.
+
+        The key is returned rather than cached, so callers hold it only for as
+        long as they need it and nothing keeps a copy alive for the life of the
+        process.
+
+        Args:
+            passphrase: The passphrase the vault was created with.
+
+        Returns:
+            The 32-byte master key.
+
+        Raises:
+            CryptoError: If the passphrase is wrong or the key material is
+                damaged.
+        """
+        return crypto.unwrap_master_key(_to_wrapped_key(self.key_material), passphrase)
 
     @classmethod
     def open(cls, path: Path) -> Self:
@@ -234,6 +281,26 @@ class Vault:
     ) -> None:
         """Close on exit, whether or not the block raised."""
         self.close()
+
+
+def _to_key_material(wrapped: crypto.WrappedKey) -> KeyMaterial:
+    """Convert crypto's wrapped key into the vault's stored shape."""
+    return KeyMaterial(
+        kdf_salt=wrapped.kdf_salt,
+        kdf_params=wrapped.kdf_params.to_json(),
+        wrapped_mk=wrapped.wrapped_key,
+        mk_check=wrapped.check,
+    )
+
+
+def _to_wrapped_key(material: KeyMaterial) -> crypto.WrappedKey:
+    """Convert the vault's stored shape back into crypto's wrapped key."""
+    return crypto.WrappedKey(
+        kdf_salt=material.kdf_salt,
+        kdf_params=crypto.KdfParams.from_json(material.kdf_params),
+        wrapped_key=material.wrapped_mk,
+        check=material.mk_check,
+    )
 
 
 def _discard(conn: sqlite3.Connection | None, lock: FileLock) -> None:
