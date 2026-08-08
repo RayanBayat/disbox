@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from disbox.config import load_settings
+from disbox.core.crypto import KdfParams
 from disbox.core.startup import RecentVaults, create_vault, open_vault
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
@@ -39,14 +41,35 @@ class StartupDialog(QDialog):
     """Opens or creates a vault, returning the opened one."""
 
     def __init__(
-        self, recents: RecentVaults, palette: Palette, parent: QWidget | None = None
+        self,
+        recents: RecentVaults,
+        palette: Palette,
+        parent: QWidget | None = None,
+        *,
+        check_storage: bool | None = None,
     ) -> None:
-        """Offer the vaults in `recents`, or a way to reach another."""
+        """Offer the vaults in `recents`, or a way to reach another.
+
+        Args:
+            recents: Previously opened vaults.
+            palette: Theme to render with.
+            parent: Owning widget.
+            check_storage: Whether Discord is configured. Read from settings
+                when omitted; passed explicitly by tests, which must not depend
+                on whether the machine running them happens to have a token.
+        """
         super().__init__(parent)
         self._recents = recents
         self._vault: Vault | None = None
         self._master_key: bytes | None = None
         self._status = ""
+        self._created_notice = ""
+        self._first_run = not recents.paths()
+
+        if check_storage is None:
+            settings = load_settings()
+            check_storage = settings.bot_token is not None and settings.channel_id is not None
+        self._discord_ready = check_storage
 
         self.setWindowTitle("Disbox")
         self.setMinimumSize(520, 440)
@@ -56,17 +79,34 @@ class StartupDialog(QDialog):
         layout.setContentsMargins(Space.XL, Space.XL, Space.XL, Space.XL)
         layout.setSpacing(Space.MD)
 
-        heading = QLabel("Open a vault")
-        heading.setObjectName("EmptyTitle")
-        layout.addWidget(heading)
+        # "Open a vault" is an instruction a first-time user cannot follow,
+        # because there is nothing to open yet.
+        self._heading = QLabel("Welcome to Disbox" if self._first_run else "Open a vault")
+        self._heading.setObjectName("EmptyTitle")
+        layout.addWidget(self._heading)
 
-        hint = QLabel(
-            "Your vault file is the index of everything you have stored. "
-            "Keep it safe: without it, your files cannot be found again."
+        self._guidance = QLabel(
+            "Start by creating a vault. The vault file is the index of "
+            "everything you store: keep it somewhere you back up, because "
+            "without it your files cannot be found again."
+            if self._first_run
+            else "Your vault file is the index of everything you have stored. "
+            "Keep it backed up: without it, your files cannot be found again."
         )
-        hint.setObjectName("StatusText")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
+        self._guidance.setObjectName("StatusText")
+        self._guidance.setWordWrap(True)
+        layout.addWidget(self._guidance)
+
+        self._storage = QLabel(
+            "Files will be stored on Discord."
+            if self._discord_ready
+            else "No Discord bot token is configured, so files will be stored "
+            "on this computer beside the vault. Add a token in Settings to "
+            "use Discord."
+        )
+        self._storage.setObjectName("StatusText")
+        self._storage.setWordWrap(True)
+        layout.addWidget(self._storage)
 
         self._list = QListWidget()
         self._list.setObjectName("TrashList")
@@ -118,6 +158,21 @@ class StartupDialog(QDialog):
         return self._vault
 
     @property
+    def guidance_text(self) -> str:
+        """What the dialog says about the vault file."""
+        return self._guidance.text()
+
+    @property
+    def storage_text(self) -> str:
+        """What the dialog says about where files will go."""
+        return self._storage.text()
+
+    @property
+    def created_notice(self) -> str:
+        """What was reported after creating a vault, empty if none was."""
+        return self._created_notice
+
+    @property
     def master_key(self) -> bytes | None:
         """The key for the opened vault, needed to build a transfer engine."""
         return self._master_key
@@ -154,28 +209,44 @@ class StartupDialog(QDialog):
             self._recents.remember(Path(selected))
             self.reload()
 
-    def create_new(self) -> None:
-        """Create a vault, then open it."""
-        selected, _ = QFileDialog.getSaveFileName(
-            self, "Create a Disbox vault", str(Path.home()), "Disbox vaults (*.dbx)"
-        )
-        if not selected:
-            return
+    def create_new(self, *, path: Path | None = None, params: KdfParams | None = None) -> None:
+        """Create a vault, then open it.
 
+        Args:
+            path: Where to create it. Asked for when omitted; supplied directly
+                by tests, which cannot answer a modal file dialog.
+            params: KDF cost, for tests that cannot afford the real one.
+        """
         passphrase = self._passphrase.text()
         if not passphrase:
+            # Checked before asking for a location, so the user is not sent
+            # through a file dialog only to be refused afterwards.
             self._report("Enter a passphrase before creating a vault.")
             return
 
-        path = Path(selected).with_suffix(".dbx")
+        if path is None:
+            selected, _ = QFileDialog.getSaveFileName(
+                self, "Create a Disbox vault", str(Path.home()), "Disbox vaults (*.dbx)"
+            )
+            if not selected:
+                return
+            path = Path(selected)
+
+        target = path.with_suffix(".dbx")
         try:
-            self._vault = create_vault(path, passphrase)
+            self._vault = create_vault(target, passphrase, params=params)
             self._master_key = self._vault.unlock(passphrase)
         except DisboxError as exc:
             self._report(str(exc))
             return
 
-        self._recents.remember(path)
+        # The path is the thing the user has to keep, so it is stated rather
+        # than left for them to find out later.
+        self._created_notice = (
+            f"Vault created at {target}. Back this file up: it is the only "
+            "record of where your files are."
+        )
+        self._recents.remember(target)
         self.accept()
 
     def open_selected(self) -> None:

@@ -130,6 +130,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M9-1 | PyInstaller bundle | ✅ Builds on 3.14, launches, 149 MB |
 | M9-2 | Inno Setup installer | 🟡 Written, never compiled — Inno Setup unavailable |
 | M9-5 | Release workflow | ✅ Tag-triggered, verifies then builds, draft release |
+| M9-4 | First-run experience | ✅ Welcome state, storage disclosure, backup notice |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate

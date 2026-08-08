@@ -92,6 +92,11 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         window = MainWindow(vault, palette, bridge=bridge, engine=engine)
+        if dialog.created_notice:
+            # Carried into the window rather than shown as a modal the user
+            # dismisses on the way in and never sees again.
+            window.notifications.warning(dialog.created_notice)
+            window._report(dialog.created_notice)
         window.show()
         return app.exec()
     finally:
