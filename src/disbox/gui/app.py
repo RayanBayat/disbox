@@ -7,8 +7,6 @@ from platformdirs import user_data_path
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from disbox.core.startup import RecentVaults
-from disbox.core.vault import Vault
-from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge
 from disbox.gui.theme.backdrop import system_prefers_dark
 from disbox.gui.theme.tokens import DARK, LIGHT
@@ -48,23 +46,20 @@ def main(argv: list[str] | None = None) -> int:
     recents = recent_vaults()
 
     if args:
-        # A path on the command line skips the picker, but an encrypted vault
-        # still needs its passphrase, which only the dialog can ask for.
+        # A path on the command line preselects that vault, but it still goes
+        # through the picker: an encrypted vault needs its passphrase, and
+        # opening it without one only defers the failure to first use.
         path = Path(args[0])
-        try:
-            vault = Vault.open(path)
-        except DisboxError as exc:
-            # A vault that is damaged or already open is an expected outcome,
-            # not a crash; the message from core already says what to do.
-            QMessageBox.critical(None, "Cannot open vault", str(exc))
-            logger.warning("vault could not be opened", path=str(path), reason=str(exc))
+        if not path.is_file():
+            QMessageBox.critical(None, "Cannot open vault", f"{path} does not exist")
+            logger.warning("vault path does not exist", path=str(path))
             return 1
         recents.remember(path)
-    else:
-        dialog = StartupDialog(recents, palette)
-        if not dialog.exec() or dialog.vault is None:
-            return 0
-        vault = dialog.vault
+
+    dialog = StartupDialog(recents, palette)
+    if not dialog.exec() or dialog.vault is None:
+        return 0
+    vault = dialog.vault
 
     bridge = AsyncBridge()
     bridge.start()
