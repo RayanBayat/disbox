@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M7 — Filesystem (2 / 9) · running under /loop
+**Branch:** `main` · **Current milestone:** M7 — Filesystem & maintenance (5 / 9) · running under /loop
 
 ---
 
@@ -19,11 +19,11 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M4** | Backend abstraction | ✅ Complete | 3 / 3 |
 | **M5** | Discord backend | ✅ Complete | 10 / 10 |
 | **M6** | Transfer engine | 🟡 Core done | 4 / 7 |
-| **M7** | Filesystem & maintenance | 🟡 In progress | 2 / 9 |
+| **M7** | Filesystem & maintenance | 🟡 In progress | 5 / 9 |
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **51 / 81** |
+| | **Total** | | **54 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 357 passed + 13 scale guards (`-m slow`) + 5 live (`-m live`) |
+| Tests | ✅ | 373 passed + 13 scale guards (`-m slow`) + 5 live (`-m live`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -181,6 +181,18 @@ nothing correlates across vaults.
 known file is stored. Standard for deduplicated encrypted storage, documented at
 `derive_chunk_key`, and reversible if you would rather have per-file keys and
 lose cross-file dedup.
+
+---
+
+## Known limitations
+
+Recorded rather than glossed, each asserted by a test:
+
+| Limitation | Detail |
+|---|---|
+| **Rebuild does not recover filenames** | Names live only in the vault; the chunk header carries no name hint, so a rescan produces placeholder names. `SPEC.md` §3.5 specified `name_hint` — implementing it is outstanding. Chunk *contents* recover fully. |
+| **Convergent encryption is confirmable** | A master-key holder can test whether a specific known file is stored. The accepted cost of deduplicating encrypted data; documented at `derive_chunk_key`. |
+| **Remote vault backup not implemented** | `SPEC.md` V6. Local snapshots exist; the encrypted copy pushed to the backend does not (M7-8). |
 
 ---
 
