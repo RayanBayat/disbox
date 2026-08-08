@@ -123,8 +123,10 @@ reversible to per-file keys.
 - Chunk contents are encrypted before they leave the machine; Discord never sees
   plaintext, and filenames are not sent as attachment names
 
-Not yet done: an independent security review, and the threat model in
-`ANALYSIS.md` has not been re-validated against the finished implementation.
+A self-review is in `docs/security-review.md`. It found and fixed a path
+traversal through node names. An **independent** review has not happened, and
+the threat model in `ANALYSIS.md` has not been re-validated against the finished
+implementation.
 
 ## Development
 

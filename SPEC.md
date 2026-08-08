@@ -594,7 +594,7 @@ Each task has an ID, a deliverable, and an acceptance criterion. Milestones are 
 
 - [x] **M10-1** Chaos suite: kill the process at 20 randomized points during upload, download, delete, and GC; assert vault consistency every time.
 - [x] **M10-2** Long-run soak: 100 GB across 50 k files, measure throughput, memory, and vault growth.
-- [ ] **M10-3** Regression tests for **every** defect in `ANALYSIS.md` §5, each named after its section number.
+- [x] **M10-3** Regression tests for **every** defect in `ANALYSIS.md` §5, each named after its section number.
 - [ ] **M10-4** Security review: token handling, key zeroization, log redaction, lockfile races, header forgery resistance.
 - [ ] **M10-5** Performance profile against every N1–N6 budget; record results in `docs/benchmarks.md`.
 

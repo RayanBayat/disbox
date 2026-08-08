@@ -32,9 +32,20 @@ __all__ = ["FileSystem", "NameCollision", "Node"]
 
 _MAX_NAME_LENGTH: Final = 255
 
-# Rejected outright: the separator would make a derived path ambiguous, and the
-# control characters are rejected by most filesystems on export anyway.
-_ILLEGAL_NAME = re.compile(r"[/\x00-\x1f]")
+# A name becomes a path when a file is downloaded, so anything a filesystem
+# would read as an instruction is refused here. Backslash matters most: it is
+# the separator on Windows, the primary target, and blocking only "/" left
+# names like `..\..\evil` free to escape the download directory. A colon would
+# open an NTFS alternate data stream rather than create a file, and the rest
+# cannot be written on Windows at all.
+_ILLEGAL_NAME = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
+
+#: Reserved on Windows whatever the extension: opening one talks to a device.
+_DEVICE_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{digit}" for digit in "123456789"}
+    | {f"lpt{digit}" for digit in "123456789"}
+)
 
 _NUMBERED = re.compile(r"^(?P<stem>.*?) \((?P<count>\d+)\)$")
 
@@ -374,6 +385,14 @@ def _validate_name(name: str) -> str:
         raise FileSystemError(msg)
     if clean in {".", ".."}:
         msg = f"{clean!r} is not a usable name"
+        raise FileSystemError(msg)
+    if clean.rstrip(". ") != clean:
+        # Windows silently strips these, so "report." and "report" would become
+        # the same file on disk while remaining distinct in the vault.
+        msg = f"name {clean!r} may not end with a dot or a space"
+        raise FileSystemError(msg)
+    if clean.split(".")[0].lower() in _DEVICE_NAMES:
+        msg = f"name {clean!r} is reserved by the operating system"
         raise FileSystemError(msg)
     return clean
 
