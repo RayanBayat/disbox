@@ -6,11 +6,18 @@
 uv run pyinstaller packaging/disbox.spec --noconfirm --distpath build/dist --workpath build/work
 ```
 
-Produces `build/dist/Disbox/Disbox.exe` and its dependencies. Around **149 MB**,
-most of it Qt.
+Produces `build/dist/Disbox/` containing **Disbox.exe** (the desktop client) and
+**disbox-cli.exe** (the command line), sharing one copy of Qt. Around **149 MB**.
 
-**Verified:** builds under Python 3.14 with PyInstaller 6.21, and the resulting
-executable launches, initialises Qt and reaches application code.
+The CLI is named `disbox-cli`, not `disbox`: Windows filenames are
+case-insensitive, so `disbox.exe` and `Disbox.exe` are the same file and one
+silently overwrites the other.
+
+**Verified:** builds under Python 3.14 with PyInstaller 6.21. The packaged CLI
+creates a vault, uploads and downloads a file, and the bytes match. That check
+exists because an earlier bundle started fine and then failed on the first vault
+it opened -- the schema migrations, read through importlib.resources, were not
+being shipped.
 
 ## Build the installer
 

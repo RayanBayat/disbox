@@ -68,20 +68,51 @@ jobs:
       - name: Build the executable
         run: uv run pyinstaller packaging/disbox.spec --noconfirm --distpath build/dist --workpath build/work
 
-      # Proves the bundle starts rather than only that it compiled. A missing Qt
-      # plugin is a runtime failure, so a build that merely succeeded says little.
+      # A build that merely compiled proves very little: missing Qt plugins and
+      # unbundled package data are runtime failures. This drives a real vault
+      # through the packaged CLI, which is what caught the schema files being
+      # left out of an earlier build -- a bundle that started fine and then
+      # failed on the first vault it opened.
       - name: Smoke-test the bundle
         shell: pwsh
+        env:
+          DISBOX_PASSPHRASE: smoke test passphrase
         run: |
-          $exe = "build/dist/Disbox/Disbox.exe"
-          if (-not (Test-Path $exe)) { throw "the build produced no executable" }
-          $proc = Start-Process $exe -ArgumentList "C:/nonexistent.dbx" -PassThru
+          $gui = "build/dist/Disbox/Disbox.exe"
+          $cli = "build/dist/Disbox/disbox-cli.exe"
+          foreach ($exe in @($gui, $cli)) {
+            if (-not (Test-Path $exe)) { throw "the build produced no $exe" }
+          }
+
+          $work = Join-Path $env:RUNNER_TEMP "smoke"
+          New-Item -ItemType Directory -Force $work | Out-Null
+          $payload = Join-Path $work "payload.bin"
+          $bytes = New-Object byte[] 65536
+          (New-Object Random 1).NextBytes($bytes)
+          [IO.File]::WriteAllBytes($payload, $bytes)
+
+          # No Discord credentials on the runner, so this exercises the local
+          # backend: the vault, schema, chunker and cipher all run for real.
+          & $cli vault create "$work/smoke.dbx"
+          if ($LASTEXITCODE -ne 0) { throw "vault create failed" }
+          & $cli put --vault "$work/smoke.dbx" $payload
+          if ($LASTEXITCODE -ne 0) { throw "upload failed" }
+          New-Item -ItemType Directory -Force "$work/out" | Out-Null
+          & $cli get --vault "$work/smoke.dbx" /payload.bin "$work/out"
+          if ($LASTEXITCODE -ne 0) { throw "download failed" }
+
+          $before = (Get-FileHash $payload -Algorithm SHA256).Hash
+          $after = (Get-FileHash "$work/out/payload.bin" -Algorithm SHA256).Hash
+          if ($before -ne $after) { throw "the packaged build did not round-trip" }
+          Write-Output "packaged round trip verified"
+
+          $proc = Start-Process $gui -ArgumentList "C:/nonexistent.dbx" -PassThru
           Start-Sleep -Seconds 20
           if ($proc.HasExited -and $proc.ExitCode -ne 1) {
-            throw "the bundle exited with $($proc.ExitCode)"
+            throw "the GUI exited with $($proc.ExitCode)"
           }
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          Write-Output "bundle launched"
+          Write-Output "GUI launched"
 
       - name: Compile the installer
         shell: pwsh
@@ -97,7 +128,14 @@ jobs:
 
       - name: Package the bundle
         shell: pwsh
-        run: Compress-Archive -Path build/dist/Disbox/* -DestinationPath build/disbox-windows.zip
+        run: |
+          Compress-Archive -Path build/dist/Disbox/* -DestinationPath build/disbox-windows.zip
+          # Checksums, so someone downloading an unsigned binary has at least
+          # one way to tell it is the file this workflow produced.
+          $lines = Get-ChildItem build/disbox-windows.zip, build/installer/*.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          $lines | Set-Content build/SHA256SUMS.txt -Encoding utf8
+          Get-Content build/SHA256SUMS.txt
 
       - name: Upload build artefacts
         uses: actions/upload-artifact@v4
@@ -113,7 +151,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true # reviewed before it is public; nothing here is signed yet
+          prerelease: true # 0.x, and the README says do not trust it with your only copy
           generate_release_notes: true
+          body_path: docs/release-notes.md
           files: |
             build/disbox-windows.zip
             build/installer/*.exe
+            build/SHA256SUMS.txt
