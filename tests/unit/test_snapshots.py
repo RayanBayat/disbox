@@ -1,7 +1,7 @@
 """Snapshots are the local safety net under the vault file."""
 
-from datetime import UTC, datetime, timedelta
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
