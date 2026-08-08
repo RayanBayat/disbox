@@ -89,6 +89,7 @@ class TitleBar(QWidget):
         button.setObjectName("WindowControl")
         button.setIcon(icons.icon(icon_name, self._palette.text_muted, size=12, ratio=2.0))
         button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
         button.setFixedSize(_BUTTON_WIDTH, _TITLE_BAR_HEIGHT)
         button.clicked.connect(slot)
         return button

@@ -183,6 +183,9 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         button.setIcon(icons.icon(name, self._palette.text_muted, size=18, ratio=2.0))
         button.setIconSize(QSize(18, 18))
         button.setToolTip(tooltip)
+        # A tooltip needs a pointer to appear, so it is no substitute for a
+        # name a screen reader can announce. Both come from the same text.
+        button.setAccessibleName(tooltip)
         button.setFixedSize(_ICON_BUTTON, _ICON_BUTTON)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
@@ -227,6 +230,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             button.setChecked(key == "vault")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+            button.setAccessibleName(label)
             if key == "trash":
                 button.setCheckable(False)
                 button.clicked.connect(lambda _=False: self.open_trash())
@@ -241,6 +245,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         # The tree takes the stretch the sidebar used to waste on empty space.
         self.tree = FolderTree(self._vault, self._palette)
+        self.tree.setAccessibleName("Folder tree")
         self.tree.directory_selected.connect(self.navigate_to)
         layout.addWidget(self.tree, 1)
 
@@ -326,6 +331,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._search_box = QLineEdit()
         self._search_box.setObjectName("Search")
         self._search_box.setPlaceholderText("Search everything")
+        self._search_box.setAccessibleName("Search everything")
         self._search_box.setClearButtonEnabled(True)
         self._search_box.textChanged.connect(self.apply_search)
         wrap_layout.addWidget(self._search_box)
@@ -349,6 +355,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         table.setObjectName("FileTable")
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        table.setAccessibleName("Files in this folder")
         table.setShowGrid(False)
         table.setAlternatingRowColors(False)
         table.setFrameShape(QFrame.Shape.NoFrame)
@@ -1060,6 +1067,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             chip.setProperty("current", "true" if position == len(crumbs) - 1 else "false")
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+            chip.setAccessibleName(f"Go to {label}")
             chip.clicked.connect(lambda _=False, node=target: self.navigate_to(node))
             self._crumb_layout.addWidget(chip)
 

@@ -123,6 +123,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-7 | Folder transfers, drop from Explorer | 🟡 Drag *out* to Explorer not done |
 | M8-11 | Undo over the journal | ✅ create/rename/delete/restore/move |
 | M8-12 | Notification centre, diagnostic IDs | ✅ No blocking modal for any error |
+| M8-14 | Accessibility: names, keyboard, scaling | ✅ Verified composited at 150% |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate

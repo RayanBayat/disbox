@@ -58,6 +58,7 @@ class TransferDock(QWidget):
         self._cancel = QToolButton()
         self._cancel.setObjectName("TransferCancel")
         self._cancel.setToolTip("Cancel")
+        self._cancel.setAccessibleName("Cancel transfer")
         self._cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self._cancel.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self._cancel.clicked.connect(self.cancel_requested.emit)
