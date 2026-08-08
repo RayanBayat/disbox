@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M1 complete → M2 (crypto) next
+**Branch:** `main` · **Current milestone:** M2 — Crypto (5 / 7) · running under /loop
 
 ---
 
@@ -14,7 +14,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 |---|---|---|---:|
 | **M0** | Bootstrap: tooling, git, CI | ✅ Complete | 7 / 7 |
 | **M1** | Vault (SQLite, snapshots, integrity) | ✅ Complete | 8 / 8 |
-| M2 | Crypto (Argon2id, AES-GCM, headers) | ⚪ Not started | 0 / 7 |
+| **M2** | Crypto (Argon2id, AES-GCM, headers) | 🟡 In progress | 5 / 7 |
 | M3 | Chunking & manifest (FastCDC, Merkle) | ⚪ Not started | 0 / 5 |
 | M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
 | M5 | Discord backend | ⚪ Not started | 0 / 10 |
@@ -23,7 +23,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **18 / 81** |
+| | **Total** | | **26 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 169 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 217 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -122,6 +122,22 @@ a thin slice now proved one assumption false immediately (see below).
 **What the UI can do today:** open a vault, browse directories, navigate
 back/up, search the whole tree, see sizes and timestamps. It cannot upload or
 download — no backend exists yet.
+
+---
+
+## M2 — Crypto
+
+| Task | Description | Status |
+|---|---|---|
+| M2-1 | Argon2id KDF with calibration | ✅ Calibrated per machine, params recorded |
+| M2-2 | Master key wrap/unwrap + verifier | ✅ Wrong passphrase rejected without touching data |
+| M2-3 | HKDF file keys + derived chunk nonces | ✅ Repeat `(key, nonce)` structurally impossible |
+| M2-4 | AES-256-GCM seal/open | ✅ Single flipped bit detected |
+| M2-5 | Encrypted chunk header (CBOR) | ✅ Random nonce; derived one was circular |
+| M2-6 | OS keyring KEK storage | ⚪ Optional, deferred |
+| M2-7 | Known-answer vectors | ⚪ Next |
+
+Vault now creates real keys via `Vault.create_encrypted` / `unlock`.
 
 ---
 
