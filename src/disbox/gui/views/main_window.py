@@ -25,8 +25,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QMimeData, QPoint, QSize, Qt, Signal
+from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -50,6 +50,7 @@ from disbox.config import load_settings
 from disbox.core.engine import TransferEngine
 from disbox.core.filesystem import FileSystem, NameCollision
 from disbox.core.search import search
+from disbox.core.tree_transfer import TreeTransfer
 from disbox.core.vault import Vault
 from disbox.errors import DisboxError
 from disbox.gui.bridge import AsyncBridge, AsyncTask, Work
@@ -457,8 +458,45 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             action.triggered.connect(slot)
             self.addAction(action)
 
+        # Dropping onto the window, not only the table: the whole content area
+        # reads as the current folder, and a drop that lands two pixels off the
+        # list would otherwise be silently discarded.
+        self.setAcceptDrops(True)
+
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._show_context_menu)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802 - Qt override
+        """Accept a drag only when it carries local files."""
+        if self._dropped_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802 - Qt override
+        """Upload whatever was dropped into the open folder."""
+        paths = self._dropped_paths(event.mimeData())
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.upload_files(paths)
+
+    @staticmethod
+    def _dropped_paths(mime: QMimeData) -> list[Path]:
+        """The local files and folders in `mime`, ignoring anything else.
+
+        A drag from a browser or a text editor carries URLs that are not files;
+        uploading those would mean fetching them, which is not what a drop onto
+        a file list means.
+        """
+        if not mime.hasUrls():
+            return []
+        return [
+            Path(url.toLocalFile())
+            for url in mime.urls()
+            if url.isLocalFile() and Path(url.toLocalFile()).exists()
+        ]
 
     def _show_context_menu(self, position: QPoint) -> None:
         """Offer the operations that apply to what is under the cursor."""
@@ -690,6 +728,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         self._transferring = True
         engine, directory = self._engine, self._directory
 
+        if source.is_dir():
+            self._run_transfer(self._folder_upload(source, directory), f"Uploading {source.name}")
+            return
+
         async def work(task: AsyncTask) -> str:
             # Opened before the node is created: creating it first leaves an
             # empty node behind for a file that turned out to be unreadable,
@@ -707,6 +749,23 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         self._run_transfer(work, f"Uploading {source.name}")
 
+    def _folder_upload(self, source: Path, directory: uuid.UUID | None) -> Work:
+        """Work that uploads `source` and everything beneath it."""
+        engine = self._engine
+
+        async def work(_: AsyncTask) -> str:
+            if engine is None:  # pragma: no cover - guarded by the caller
+                return source.name
+            walker = TreeTransfer(FileSystem(self._vault), engine)
+            result = await walker.upload_folder(source, directory)
+            # Partial success is the common case for a tree, so the count is
+            # reported rather than the whole thing being called a failure.
+            if result.failures:
+                return f"{source.name}: {len(result.failures)} entries could not be uploaded"
+            return f"{source.name}: {result.files} files"
+
+        return work
+
     def download_selected(self, destination: Path) -> None:
         """Write every selected file into `destination`."""
         nodes = self.selected_nodes
@@ -720,10 +779,15 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         async def work(task: AsyncTask) -> str:
             filesystem = FileSystem(self._vault)
+            walker = TreeTransfer(filesystem, engine)
             for node_id in nodes:
                 node = filesystem.resolve(node_id)
-                if node.kind != "file":
-                    continue  # folders need a tree walk, which is M8-7
+                if node.kind == "dir":
+                    # download_folder creates the named folder itself, so it
+                    # takes the destination directory rather than the path the
+                    # folder should end up at.
+                    await walker.download_folder(node_id, destination)
+                    continue
                 with (destination / node.name).open("wb") as handle:
                     await engine.download(
                         node_id,
