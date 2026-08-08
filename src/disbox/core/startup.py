@@ -102,11 +102,16 @@ def create_vault(path: Path, passphrase: str, *, params: KdfParams | None = None
     )
 
 
-def open_vault(path: Path, passphrase: str) -> Vault:
+def open_vault(path: Path, passphrase: str) -> tuple[Vault, bytes]:
     """Open an existing vault and verify the passphrase.
 
     The passphrase is checked here rather than at first use, so a wrong one is
     reported while the user is still looking at the prompt.
+
+    Returns:
+        The opened vault and its master key. The key is returned rather than
+        derived again later because Argon2id is deliberately expensive, and
+        paying that twice on every launch is a second of startup for nothing.
 
     Raises:
         VaultError: If the vault cannot be opened.
@@ -114,8 +119,8 @@ def open_vault(path: Path, passphrase: str) -> Vault:
     """
     vault = Vault.open(path)
     try:
-        vault.unlock(passphrase)
+        master_key = vault.unlock(passphrase)
     except Exception:
         vault.close()  # never leave the single-writer lock held on a failure
         raise
-    return vault
+    return vault, master_key

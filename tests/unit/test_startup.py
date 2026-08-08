@@ -100,8 +100,10 @@ def test_a_created_vault_opens_with_its_passphrase(tmp_path: Path) -> None:
     with create_vault(path, PASSPHRASE, params=FAST):
         pass
 
-    with open_vault(path, PASSPHRASE) as vault:
+    vault, master_key = open_vault(path, PASSPHRASE)
+    with vault:
         assert vault.is_open
+        assert len(master_key) == 32
 
 
 def test_the_wrong_passphrase_is_refused(tmp_path: Path) -> None:
@@ -110,7 +112,7 @@ def test_the_wrong_passphrase_is_refused(tmp_path: Path) -> None:
         pass
 
     with pytest.raises(DisboxError):
-        open_vault(path, "not the passphrase").close()
+        open_vault(path, "not the passphrase")
 
 
 def test_creating_over_an_existing_vault_is_refused(tmp_path: Path) -> None:

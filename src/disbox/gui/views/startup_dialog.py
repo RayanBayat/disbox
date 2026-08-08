@@ -45,6 +45,7 @@ class StartupDialog(QDialog):
         super().__init__(parent)
         self._recents = recents
         self._vault: Vault | None = None
+        self._master_key: bytes | None = None
         self._status = ""
 
         self.setWindowTitle("Disbox")
@@ -117,6 +118,11 @@ class StartupDialog(QDialog):
         return self._vault
 
     @property
+    def master_key(self) -> bytes | None:
+        """The key for the opened vault, needed to build a transfer engine."""
+        return self._master_key
+
+    @property
     def status_text(self) -> str:
         """The message currently shown."""
         return self._status
@@ -164,6 +170,7 @@ class StartupDialog(QDialog):
         path = Path(selected).with_suffix(".dbx")
         try:
             self._vault = create_vault(path, passphrase)
+            self._master_key = self._vault.unlock(passphrase)
         except DisboxError as exc:
             self._report(str(exc))
             return
@@ -179,7 +186,7 @@ class StartupDialog(QDialog):
             return
 
         try:
-            self._vault = open_vault(path, self._passphrase.text())
+            self._vault, self._master_key = open_vault(path, self._passphrase.text())
         except DisboxError as exc:
             self._report(str(exc))
             return

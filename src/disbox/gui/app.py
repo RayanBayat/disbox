@@ -6,7 +6,13 @@ from pathlib import Path
 from platformdirs import user_data_path
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from disbox.backends.base import StorageBackend
+from disbox.backends.discord import DiscordBackend
+from disbox.backends.local import LocalBackend
+from disbox.config import load_settings
+from disbox.core.engine import TransferEngine
 from disbox.core.startup import RecentVaults
+from disbox.core.vault import Vault
 from disbox.gui.bridge import AsyncBridge
 from disbox.gui.theme.backdrop import system_prefers_dark
 from disbox.gui.theme.tokens import DARK, LIGHT
@@ -17,6 +23,19 @@ from disbox.log import configure, get_logger
 __all__ = ["main"]
 
 logger = get_logger(__name__)
+
+
+def build_backend(vault: Vault) -> StorageBackend:
+    """The configured storage backend, or local disk when Discord is not set up.
+
+    Falling back to local storage rather than disabling transfers means the
+    application is usable end to end without credentials, which is also how the
+    CLI behaves.
+    """
+    settings = load_settings()
+    if settings.bot_token is not None and settings.channel_id is not None:
+        return DiscordBackend(settings.bot_token.get_secret_value(), settings.channel_id)
+    return LocalBackend(vault.path.parent / "blobs")
 
 
 def recent_vaults() -> RecentVaults:
@@ -60,11 +79,19 @@ def main(argv: list[str] | None = None) -> int:
     if not dialog.exec() or dialog.vault is None:
         return 0
     vault = dialog.vault
+    master_key = dialog.master_key
 
     bridge = AsyncBridge()
     bridge.start()
     try:
-        window = MainWindow(vault, palette, bridge=bridge)
+        # Without an engine the window browses but cannot transfer, so it is
+        # built here rather than left to the window to discover it has none.
+        engine = (
+            TransferEngine(vault, build_backend(vault), master_key)
+            if master_key is not None
+            else None
+        )
+        window = MainWindow(vault, palette, bridge=bridge, engine=engine)
         window.show()
         return app.exec()
     finally:

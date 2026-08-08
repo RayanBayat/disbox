@@ -126,6 +126,7 @@ a thin slice now proved one assumption false immediately (see below).
 | M8-14 | Accessibility: names, keyboard, scaling | ✅ Verified composited at 150% |
 | M8-10 | Vault picker, create, unlock | ✅ Recent list under platformdirs |
 | M8-15 | pytest-qt coverage for dialogs | ✅ 548 tests; lock test mutation-checked |
+| M9-3 | README, .env.example | ✅ GUI engine wiring fixed while writing them |
 | M8-5..15 | Transfers, trash, properties, theming, a11y | ⚪ Await M6/M7 |
 
 **What the UI can do today:** open a vault, browse directories, navigate
