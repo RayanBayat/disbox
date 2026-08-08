@@ -4,7 +4,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 [`SPEC.md`](./SPEC.md) §10.
 
 **Last updated:** 2026-08-07
-**Branch:** `main` · **Current milestone:** M2 — Crypto (5 / 7) · running under /loop
+**Branch:** `main` · **Current milestone:** M3 — Chunking (4 / 5) · running under /loop
 
 ---
 
@@ -14,8 +14,8 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 |---|---|---|---:|
 | **M0** | Bootstrap: tooling, git, CI | ✅ Complete | 7 / 7 |
 | **M1** | Vault (SQLite, snapshots, integrity) | ✅ Complete | 8 / 8 |
-| **M2** | Crypto (Argon2id, AES-GCM, headers) | 🟡 In progress | 5 / 7 |
-| M3 | Chunking & manifest (FastCDC, Merkle) | ⚪ Not started | 0 / 5 |
+| **M2** | Crypto (Argon2id, AES-GCM, headers) | ✅ Complete | 6 / 7 * |
+| **M3** | Chunking & manifest (FastCDC, Merkle) | 🟡 In progress | 4 / 5 |
 | M4 | Backend abstraction | ⚪ Not started | 0 / 3 |
 | M5 | Discord backend | ⚪ Not started | 0 / 10 |
 | M6 | Transfer engine | ⚪ Not started | 0 / 7 |
@@ -23,7 +23,7 @@ Live status of the rewrite. Updated as each task lands; the task IDs match
 | **M8** | GUI (PySide6) | 🟡 Skeleton done | 3 / 15 |
 | M9 | CLI, packaging, docs | ⚪ Not started | 0 / 5 |
 | M10 | Hardening | ⚪ Not started | 0 / 5 |
-| | **Total** | | **26 / 81** |
+| | **Total** | | **32 / 81** |
 
 Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
@@ -33,7 +33,7 @@ Legend: ✅ done · 🟡 in progress · ⚪ not started · 🔴 blocked
 
 | Gate | Status | Detail |
 |---|---|---|
-| Tests | ✅ | 217 passed + 13 scale guards (`-m slow`) |
+| Tests | ✅ | 258 passed + 13 scale guards (`-m slow`) |
 | Types | ✅ | `mypy --strict`, 35 files, no issues |
 | Lint | ✅ | `ruff check` clean |
 | Format | ✅ | `ruff format --check` clean |
@@ -135,9 +135,23 @@ download — no backend exists yet.
 | M2-4 | AES-256-GCM seal/open | ✅ Single flipped bit detected |
 | M2-5 | Encrypted chunk header (CBOR) | ✅ Random nonce; derived one was circular |
 | M2-6 | OS keyring KEK storage | ⚪ Optional, deferred |
-| M2-7 | Known-answer vectors | ⚪ Next |
+| M2-7 | Known-answer vectors | ✅ NIST GCM, RFC 5869, BLAKE3 — each verified before committing |
 
 Vault now creates real keys via `Vault.create_encrypted` / `unlock`.
+
+\* M2-6 (OS keyring) is optional convenience, deliberately deferred.
+
+---
+
+## M3 — Chunking
+
+| Task | Description | Status |
+|---|---|---|
+| M3-1 | FastCDC content-defined chunking | ✅ Insertion disturbs <20% of chunks |
+| M3-2 | BLAKE3 chunk hashing | ✅ |
+| M3-3 | Entropy probe + conditional zstd | ✅ Never grows incompressible data |
+| M3-4 | Merkle root build/verify | ✅ Domain-separated leaves and nodes |
+| M3-5 | Dedup lookup against `chunks` | ⚪ Next — needs the backend protocol |
 
 ---
 
