@@ -83,7 +83,10 @@ class StorageBackendConformance:
 
     @pytest.mark.asyncio
     async def test_streaming_reassembles_the_blob(self, backend: StorageBackend) -> None:
-        payload = bytes(range(256)) * 500
+        # Sized against the backend's own limit: a fixed payload would exceed
+        # what a small-limit backend accepts and test nothing about streaming.
+        repeats = max(1, min(500, backend.max_blob_size // 512))
+        payload = bytes(range(256)) * repeats
         ref = await backend.put(payload, idempotency_key="streamed")
         assert b"".join([block async for block in backend.stream(ref)]) == payload
 

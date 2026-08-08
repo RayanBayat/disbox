@@ -26,6 +26,10 @@ class CryptoError(DisboxError):
     """A key could not be derived, or data failed to decrypt or authenticate."""
 
 
+class BackendError(DisboxError):
+    """A storage backend refused a request or returned something unusable."""
+
+
 class TransferError(DisboxError):
     """A file could not be uploaded or reassembled."""
 
