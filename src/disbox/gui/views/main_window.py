@@ -41,7 +41,11 @@ from disbox.core.search import search
 from disbox.core.vault import Vault
 from disbox.gui.models.file_table import Column, FileTableModel, format_size
 from disbox.gui.theme import Backdrop, Palette, Space, apply_backdrop, icons
-from disbox.gui.theme.backdrop import round_window_corners, set_dark_titlebar
+from disbox.gui.theme.backdrop import (
+    round_window_corners,
+    set_dark_titlebar,
+    system_prefers_dark,
+)
 from disbox.gui.theme.stylesheet import build_stylesheet
 from disbox.gui.theme.tokens import DARK, LIGHT
 from disbox.gui.views.chrome import FramelessMixin, TitleBar
@@ -82,8 +86,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
 
         self.table_model = FileTableModel(vault, palette=palette)
         self._build_ui()
-        self.setStyleSheet(build_stylesheet(palette))
+        # The material decides whether surfaces may be translucent, so it is
+        # settled before the stylesheet that depends on it.
         self._apply_window_material()
+        self.setStyleSheet(build_stylesheet(palette, translucent=self._translucent))
         self._refresh()
 
     # -------------------------------------------------------------- chrome --
@@ -102,14 +108,23 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         set_dark_titlebar(handle, dark=self._palette.is_dark)
         if self._material_hook is not None:
             self._material_hook(self._palette.is_dark)
+
         # A frameless window loses the compositor's corner rounding; ask for it
         # back, or the app sits on the desktop with hard right angles that no
         # other Windows 11 window has.
         round_window_corners(handle)
-        if apply_backdrop(handle, Backdrop.MICA):
-            # Only stop painting our own background once the material is
-            # confirmed; otherwise the window would render as a hole.
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        # Glass only when the app theme agrees with the system's. Mica is drawn
+        # from the wallpaper and tinted by Windows, so a light app over a dark
+        # system puts light translucent surfaces on a dark material and renders
+        # as muddy grey. An opaque window that looks correct beats a
+        # translucent one that does not.
+        self._translucent = self._palette.is_dark == system_prefers_dark()
+        if self._translucent and apply_backdrop(handle, Backdrop.MICA):
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        else:
+            apply_backdrop(handle, Backdrop.NONE)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
 
     def _icon_button(self, name: str, tooltip: str) -> QToolButton:
         """Build a flat, icon-only button in the header."""
@@ -119,6 +134,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         button.setToolTip(tooltip)
         button.setFixedSize(_ICON_BUTTON, _ICON_BUTTON)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         return button
 
     def _build_sidebar(self) -> QWidget:
@@ -157,6 +173,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             button.setCheckable(True)
             button.setChecked(key == "vault")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             button.clicked.connect(lambda _=False: self.navigate_to(None))
             self._nav_buttons[key] = button
             layout.addWidget(button)
@@ -373,8 +390,10 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
         their own copies of the palette and must be told too.
         """
         self._palette = palette
-        self.setStyleSheet(build_stylesheet(palette))
+        # The material decides whether surfaces may be translucent, so it is
+        # settled before the stylesheet that depends on it.
         self._apply_window_material()
+        self.setStyleSheet(build_stylesheet(palette, translucent=self._translucent))
         self.table_model.set_palette(palette)
         self.row_delegate.set_palette(palette)
         self.details.set_palette(palette)
@@ -534,6 +553,7 @@ class MainWindow(FramelessMixin, QMainWindow):  # type: ignore[misc]
             chip.setObjectName("Crumb")
             chip.setProperty("current", "true" if position == len(crumbs) - 1 else "false")
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             chip.clicked.connect(lambda _=False, node=target: self.navigate_to(node))
             self._crumb_layout.addWidget(chip)
 

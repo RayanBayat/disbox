@@ -17,6 +17,9 @@ from being solid.
 import ctypes
 import platform
 import sys
+
+if sys.platform == "win32":
+    import winreg
 from ctypes import wintypes
 from enum import IntEnum
 from typing import Final
@@ -67,6 +70,32 @@ def _windows_build() -> int:
         return int(platform.version().split(".")[-1])
     except ValueError, IndexError:  # pragma: no cover - unparseable version string
         return 0
+
+
+def system_prefers_dark() -> bool:
+    """Whether Windows itself is in dark mode.
+
+    This matters because Mica is drawn from the *desktop wallpaper* and tinted
+    to the system theme. An application cannot make it light while Windows is
+    dark, so a light app theme over a dark system leaves light translucent
+    surfaces sitting on a dark material -- which renders as muddy grey rather
+    than light. Callers use this to decide whether translucency is even
+    viable, instead of applying it unconditionally and hoping.
+
+    Returns:
+        True when Windows is dark, and on any platform where the setting
+        cannot be read, since an opaque window is the safe default.
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            return not bool(winreg.QueryValueEx(key, "AppsUseLightTheme")[0])
+    except OSError:  # pragma: no cover - key absent on some installs
+        return True
 
 
 def is_supported() -> bool:

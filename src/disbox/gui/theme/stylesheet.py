@@ -16,8 +16,25 @@ from disbox.gui.theme.tokens import Palette, Radius, Space, Type
 __all__ = ["build_stylesheet"]
 
 
-def build_stylesheet(p: Palette) -> str:
-    """Return the complete stylesheet for `p`."""
+def build_stylesheet(p: Palette, *, translucent: bool = True) -> str:
+    """Return the complete stylesheet for `p`.
+
+    Args:
+        p: Palette to render.
+        translucent: Whether the window has a compositor material behind it.
+            When it does not, surfaces are painted opaque -- a translucent
+            surface with nothing behind it shows the desktop through the app.
+
+    Qt Style Sheets have a trap that shapes everything here: styling *any*
+    property of a widget makes Qt render that widget entirely from the
+    stylesheet, so every state left undefined falls back to the platform style
+    and looks nothing like the rest. Each control therefore declares all of its
+    states -- hover, pressed, checked, focus, disabled -- rather than only the
+    ones that seemed to need it.
+    """
+    window_bg = p.window if translucent else _opaque(p.window)
+    surface = p.surface if translucent else _opaque(p.surface)
+    raised = p.surface_raised if translucent else _opaque(p.surface_raised)
     # Scrollbars deserve special mention: Qt's defaults are chunky and dated,
     # and a thin overlay bar is one of the clearest signals of a modern app.
     return f"""
@@ -29,7 +46,7 @@ def build_stylesheet(p: Palette) -> str:
 }}
 
 QWidget#Root {{
-    background: {p.window};
+    background: {window_bg};
 }}
 
 QWidget#TitleBar {{
@@ -51,7 +68,9 @@ QToolButton#WindowControl {{
 }}
 QToolButton#WindowControl:hover {{ background: {p.surface_hover}; }}
 QToolButton#WindowControl:pressed {{ background: {p.surface_active}; }}
+QToolButton#WindowControl:focus {{ background: transparent; }}
 QToolButton#CloseButton:hover {{ background: {p.danger}; }}
+QToolButton#CloseButton:pressed {{ background: {p.danger}; }}
 
 QFrame#MeterTrack {{
     background: {p.surface_hover};
@@ -65,7 +84,7 @@ QFrame#MeterFill {{
 }}
 
 QWidget#Sidebar {{
-    background: {p.surface};
+    background: {surface};
     border-right: 1px solid {p.border};
 }}
 
@@ -130,11 +149,16 @@ QPushButton#NavItem:hover {{
     background: {p.surface_hover};
     color: {p.text};
 }}
+QPushButton#NavItem:pressed {{ background: {p.surface_active}; color: {p.text}; }}
+QPushButton#NavItem:focus {{ background: {p.surface_hover}; color: {p.text}; }}
 QPushButton#NavItem:checked {{
     background: {p.accent_subtle};
     color: {p.text};
     font-weight: {Type.WEIGHT_SEMIBOLD};
 }}
+QPushButton#NavItem:checked:hover {{ background: {p.accent_subtle}; color: {p.text}; }}
+QPushButton#NavItem:checked:pressed {{ background: {p.accent_subtle}; color: {p.text}; }}
+QPushButton#NavItem:disabled {{ background: transparent; color: {p.text_subtle}; }}
 
 /* ---- Toolbar buttons --------------------------------------------------- */
 
@@ -146,7 +170,9 @@ QToolButton {{
 }}
 QToolButton:hover {{ background: {p.surface_hover}; }}
 QToolButton:pressed {{ background: {p.surface_active}; }}
-QToolButton:disabled {{ opacity: 0.4; }}
+QToolButton:focus {{ background: {p.surface_hover}; }}
+QToolButton:checked {{ background: {p.surface_active}; }}
+QToolButton:disabled {{ background: transparent; color: {p.text_subtle}; }}
 
 /* ---- Breadcrumb -------------------------------------------------------- */
 
@@ -159,6 +185,9 @@ QPushButton#Crumb {{
     font-size: {Type.BODY}px;
 }}
 QPushButton#Crumb:hover {{ background: {p.surface_hover}; color: {p.text}; }}
+QPushButton#Crumb:pressed {{ background: {p.surface_active}; color: {p.text}; }}
+QPushButton#Crumb:focus {{ background: {p.surface_hover}; color: {p.text}; }}
+QPushButton#Crumb:disabled {{ background: transparent; color: {p.text_subtle}; }}
 QPushButton#Crumb[current="true"] {{
     color: {p.text};
     font-weight: {Type.WEIGHT_SEMIBOLD};
@@ -169,7 +198,7 @@ QLabel#CrumbSep {{ color: {p.text_subtle}; }}
 /* ---- Search ------------------------------------------------------------ */
 
 QLineEdit#Search {{
-    background: {p.surface_raised};
+    background: {raised};
     border: 1px solid {p.border};
     border-radius: {Radius.PILL}px;
     padding: {Space.SM}px {Space.MD}px {Space.SM}px 34px;
@@ -178,7 +207,7 @@ QLineEdit#Search {{
     selection-color: {p.accent_text};
 }}
 QLineEdit#Search:hover {{ border-color: {p.border_strong}; }}
-QLineEdit#Search:focus {{ border-color: {p.accent}; background: {p.surface_raised}; }}
+QLineEdit#Search:focus {{ border-color: {p.accent}; background: {raised}; }}
 
 /* ---- File table -------------------------------------------------------- */
 
@@ -217,7 +246,7 @@ QHeaderView::up-arrow, QHeaderView::down-arrow {{
 /* ---- Details pane ------------------------------------------------------ */
 
 QWidget#Details {{
-    background: {p.surface};
+    background: {surface};
     border-left: 1px solid {p.border};
 }}
 QLabel#DetailName {{
@@ -261,7 +290,7 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 /* ---- Menus and tooltips ------------------------------------------------- */
 
 QMenu {{
-    background: {p.surface_raised};
+    background: {raised};
     border: 1px solid {p.border};
     border-radius: {Radius.MD}px;
     padding: {Space.XS}px;
@@ -275,10 +304,23 @@ QMenu::item:selected {{ background: {p.surface_hover}; color: {p.text}; }}
 QMenu::separator {{ height: 1px; background: {p.border}; margin: {Space.XS}px; }}
 
 QToolTip {{
-    background: {p.surface_raised};
+    background: {raised};
     border: 1px solid {p.border};
     border-radius: {Radius.SM}px;
     padding: {Space.XS}px {Space.SM}px;
     color: {p.text};
 }}
 """
+
+
+def _opaque(colour: str) -> str:
+    """Drop the alpha from an rgba() token.
+
+    Used when no compositor material sits behind the window: a translucent
+    surface with nothing behind it shows the desktop straight through the app.
+    """
+    if not colour.startswith("rgba("):
+        return colour
+    parts = [part.strip() for part in colour.removeprefix("rgba(").rstrip(")").split(",")]
+    red, green, blue = parts[0], parts[1], parts[2]
+    return f"rgb({red}, {green}, {blue})"
